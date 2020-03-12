@@ -1,0 +1,318 @@
+#!/sbin/sh
+# TWRP A/B Installer Backend
+# by Zackptg5, Osm0sis, Dees_Troy, Topjohnwu, and CosmicDan
+
+# Functions needed early
+ui_print() { $BOOTMODE && echo "$1" || echo -e "ui_print $1\nui_print" >> $OUTFD; }
+abort() { ui_print "$1"; ui_print " "; exit 1; }
+
+# Set vars
+OUTFD=/proc/self/fd/$2
+ZIPFILE="$3"
+tmp=/dev/tmp/twrp-install
+target=/dev/block/bootdevice/by-name/boot
+format=true
+magiskdata=false
+KEEPVERITY=false
+RECOVERYMODE=false
+PERSISTDIR=/persist
+mkdir /persist 2>/dev/null
+
+# Make sure random don't get blocked, unset library paths
+mount -o bind /dev/urandom /dev/random
+OLD_LD_PATH=$LD_LIBRARY_PATH
+OLD_LD_PRE=$LD_PRELOAD
+OLD_LD_CFG=$LD_CONFIG_FILE
+unset LD_LIBRARY_PATH LD_PRELOAD LD_CONFIG_FILE
+
+# detect Magisk Manager/booted flashing
+ps | grep zygote | grep -v grep >/dev/null && BOOTMODE=true || BOOTMODE=false
+$BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -v grep >/dev/null && BOOTMODE=true
+$BOOTMODE && abort "! Flash in TWRP - use img by mauronofrio if first install!"
+
+case $ZIPFILE in
+  "/sideload/package.zip"|"/tmp/"*|"/dev/"*) ;;
+  *) cp -f "$ZIPFILE" "/tmp/$(basename "$ZIPFILE")"; ui_print " "; ui_print "! Zip can't be flashed from $(dirname "$ZIPFILE")"; abort "! Copied to /tmp - flash from there";;
+esac
+
+ui_print "###########################################"
+ui_print "#         TWRP + Magisk Installer         #"
+ui_print "#          with a/b userdata for          #"
+ui_print "#        OnePlus 7/7 Pro/7 Pro 5G         #"
+ui_print "#               by Zackptg5               #"
+ui_print "###########################################"
+ui_print "#        TWRP build by Mauronofrio        #"
+ui_print "###########################################"
+ui_print "# Note that this will also disable verity #"
+ui_print "###########################################"
+ui_print " "
+
+set -x
+rm -rf $tmp
+mkdir -p $tmp
+unzip -o "$ZIPFILE" -d $tmp || abort "Failed to extract zip!"
+sleep 1
+
+# Device check
+supported=false
+ui_print "- Checking device compatibility"
+for i in OnePlus7Pro guacamole OnePlus7 guacamoleb OnePlus7ProTMO guacamolet OP7ProNRSpr guacamoles; do
+  for prop in "ro.product.device" "ro.build.product" "ro.product.vendor.device" "ro.vendor.product.device" "ro.omni.device"; do
+    [ "$(getprop $prop)" == "$i" ] && { ui_print "  Supported Device Detected!"; supported=true; break 2; }
+  done
+done
+$supported || abort "  Unsupported device! Aborting!"
+ui_print " "
+
+# Setup tools
+export tools=$tmp/tools
+cd $tools
+chmod -R 0755 $tools
+export PATH=$tools:$PATH
+cp -af magiskinit magiskpolicy
+busybox --install -s .
+. functions.sh
+cd $tmp
+
+# Get current layout
+if [ "$(sgdisk --print /dev/block/sda | grep -i userdata2)" ]; then
+  curlayout="a/b/c"
+  ui_print "- Current layout is: A/B with common data partition"
+elif [ "$(sgdisk --print /dev/block/sda | grep -i userdata_a)" ]; then
+  curlayout="a/b"
+  ui_print "- Current layout is: a/b"
+else
+  curlayout="stock"
+  ui_print "- Current layout is: stock"
+fi
+# Set new layout
+ui_print "  Keep current layout?"
+ui_print "  Vol+ yes, Vol- no"
+if chooseport; then
+  layout="$curlayout"
+  ui_print " "
+  ui_print "- Reformat Data as Ext4 or F2FS?"
+  ui_print "  Vol+ yes, Vol- no"
+  if chooseport; then
+    ui_print " "
+    ui_print "- Ext4 or F2FS?"
+    ui_print "  Note that your kernel must be f2fs compatible"
+    ui_print "  Vol+ Ext4 (Stock/Recommended), Vol- F2FS"
+    chooseport && type="ext4" || type="f2fs"
+  else
+    format=false
+  fi
+else
+  ui_print " "
+  ui_print "- Switch to a/b/(c) userdata or stock?"
+  ui_print "  Vol+ a/b/(c), Vol- stock"
+  if chooseport; then
+    ui_print " "
+    ui_print "- Have a common data partition or pure a/b?"
+    ui_print "  Vol+ a/b/c, Vol- a/b only"
+    chooseport && layout="a/b/c" || layout="a/b"
+  else
+    layout="stock"
+  fi
+  ui_print " "
+  ui_print "- Format Data as Ext4 or F2FS?"
+  ui_print "  Note that your kernel must be f2fs compatible"
+  ui_print "  Vol+ Ext4 (Stock/Recommended), Vol- F2FS"
+  chooseport && type="ext4" || type="f2fs"
+fi
+# Set other args
+ui_print " "
+ui_print "- Forced Encryption: Enable or Disable?"
+ui_print "  Vol+ Enable, Vol- Disable"
+chooseport && KEEPFORCEENCRYPT=true || KEEPFORCEENCRYPT=false
+if [ "$layout" == "a/b/c" ]; then
+  ui_print " "
+  ui_print "  Enable for common data partition?"
+  ui_print "  Choose 'Disable' if each slot has a different rom"
+  ui_print "  Vol+ Enable, Vol- Disable"
+  chooseport && commonforceencrypt=true || commonforceencrypt=false
+fi
+ui_print " "
+ui_print "- Install magisk to both slots?"
+ui_print "  Vol+ yes, Vol- no"
+chooseport && magisk=true || magisk=false
+ui_print " "
+ui_print "- Selected Options"
+ui_print "  Layout: $curlayout -> $layout"
+$format && ui_print "  Format Data: Yes -> $type" || ui_print "  Format Data: No"
+$KEEPFORCEENCRYPT && ui_print "  Forced Encryption: Enabled" || ui_print "  Forced Encryption: Disabled"
+[ "$commonforceencrypt" ] && { $commonforceencrypt && ui_print "  Common Data Forced Encryption: Enabled" || ui_print "  Common Data Forced Encryption: Disabled"; }
+ui_print "  Dm-Verity: Disabled"
+$magisk && ui_print "  Root: Magisk" || ui_print "  Root: None"
+sleep 1
+ui_print " "
+ui_print "- Last Chance - Are you sure?"
+$format && ui_print "  All data including internal storage will be wiped"
+[ "$layout" == "$curlayout" ] && ui_print "  No repartitioning will be needed"
+ui_print "  Vol+ yes, Vol- no (exit installer)"
+chooseport && ui_print " " || { ui_print " "; abort "Exiting installer!"; }
+ui_print "- Beginning install"
+export KEEPVERITY
+export KEEPFORCEENCRYPT
+
+# Patch TWRP if needed for slot userdata and metadata
+if [ "$layout" != "stock" ]; then
+  magiskboot cpio ramdisk-recovery.cpio "extract etc/recovery.wipe recovery.wipe"
+  sed -i 's|^/dev/block/bootdevice/by-name/userdata$|/dev/block/bootdevice/by-name/userdata_a\n/dev/block/bootdevice/by-name/userdata_b|' recovery.wipe
+  magiskboot cpio ramdisk-recovery.cpio "add 0644 etc/recovery.wipe recovery.wipe"
+  magiskboot cpio ramdisk-recovery.cpio "extract etc/twrp.fstab twrp.fstab"
+  sed -ri -e 's|(/userdata.*flags=)|\1slotselect;|' -e 's|(.*name/metadata) *|\1\t\t\t\t\tflags=slotselect;backup=0;display="Metadata"|' twrp.fstab
+  [ "$layout" == "a/b/c" ] && { sed -i '\|/data|a/datacommon\t\text4\t/dev/block/bootdevice/by-name/userdata2\t\t\t\t\tflags=display="Common Storage";wipeingui;storage;fileencryption=ice:aes-256-cts;keydirectory=/metadatacommon/vold/metadata_encryption\n/metadatacommon\text4\t/dev/block/bootdevice/by-name/metadata2\t\t\t\t\tflags=backup=0;display="Common Metadata"' twrp.fstab; magiskboot cpio ramdisk-recovery.cpio "mkdir 0771 datacommon"; }
+  magiskboot cpio ramdisk-recovery.cpio "add 0644 etc/twrp.fstab twrp.fstab"
+fi
+# Add missing useful binaries
+for i in magiskboot magiskpolicy sgdisk; do
+  magiskboot cpio ramdisk-recovery.cpio "exists /sbin/$i" || magiskboot cpio ramdisk-recovery.cpio "add 0755 sbin/$i $tools/$i"
+done
+
+# Reparition and/or format userdata and metadata if applicable
+unmountAllAndRefreshPartitions
+if [ "$layout" != "$curlayout" ]; then
+  repartition_userdata
+elif $format; then
+  format_userdata
+fi
+
+# Everything else
+for slot_select in active inactive; do
+  reset_slot
+  ui_print " "
+  ui_print "- Patching $slot_select slot: $slot..."
+  mkdir boot
+  cd boot
+  dd bs=1048576 if=$target$slot of=boot.img
+  magiskboot unpack -h boot.img
+
+  # boot.img header cmdline remove skip_override (flar2 patch)
+  sed -i "s|$(grep '^cmdline=' header | cut -d= -f2-)|$(grep '^cmdline=' header | cut -d= -f2- | sed -e 's/skip_override//' -e 's/  */ /g' -e 's/[ \t]*$//')|" header
+
+  # Install twrp
+  cp -f $tmp/ramdisk-recovery.cpio ramdisk.cpio
+
+  # Possibly using 2SI, export env var
+  magiskboot cpio ramdisk.cpio test
+  STATUS=$?
+  [ $((STATUS & 8)) -ne 0 ] && export TWOSTAGEINIT=true
+
+  # Mount other needed partitions
+  mount "/dev/block/bootdevice/by-name/system$slot" /system
+  mount --move /system /system_root
+  mount -o bind /system_root/system /system
+	mount "/dev/block/bootdevice/by-name/vendor$slot" /vendor
+  mount "/dev/block/bootdevice/by-name/odm$slot" /odm
+  mount /dev/block/bootdevice/by-name/persist /persist
+
+  if [ -f /system/build.prop ]; then
+    rm -rf /system_root/datacommon /system_root/metadatacommon /system_root/init.mount_datacommon.sh
+    [ "$(grep '# Zackptg5-DualBoot' /system_root/init.rc)" ] && sed -i -e "/# Zackptg5-DualBootMod/,/init.mount_datacommon.sh/d" -e "$d" /system_root/init.rc
+    while true; do 
+      [ "$(tail -n1 /system_root/init.rc)" ] && break || sed -i '$d' /system_root/init.rc
+    done
+
+    # Get location of sepolicy
+    $magisk && context=magisk || context=shell
+    [ -f /system/etc/selinux/plat_sepolicy.cil.bak ] && mv -f /system/etc/selinux/plat_sepolicy.cil.bak /system/etc/selinux/plat_sepolicy.cil
+    if [ -f /system/etc/selinux/plat_sepolicy.cil ]; then
+      # Split policy
+      if [ -f /odm/etc/selinux/precompiled_sepolicy ]; then
+        file=/odm/etc/selinux/precompiled_sepolicy
+      elif [ -f /vendor/etc/selinux/precompiled_sepolicy ]; then
+        file=/vendor/etc/selinux/precompiled_sepolicy
+      elif [ -e /system_root/force_debuggable ] && [ -f /system_root/adb_debug.prop ] && [ -f /system_root/userdebug_plat_sepolicy.cil ]; then
+        # Completely untested
+        file=/system_root/userdebug_plat_sepolicy.cil
+      else
+        # file=/system/etc/selinux/plat_sepolicy.cil
+        # Modifying cil ends up in QCOM Fastboot so we'll force monolithic creation instead
+        file=/system_root/sepolicy
+        rm -f $file
+        magiskpolicy --compile-split --save $file
+        mv -f /system/etc/selinux/plat_sepolicy.cil /system/etc/selinux/plat_sepolicy.cil.bak
+      fi
+    # Monolithic policy
+    elif [ -f /system_root/sepolicy ]; then
+      file=/system_root/sepolicy
+    else
+      # Ramdisk sepolicy is for recovery only
+      abort "  Sepolicy not found! Report to @Zackptg5"
+    fi
+
+    ui_print "  Patching sepolicy"
+    # Needed for encryption -> "Unable to measure size of /dev/block/bootdevice/by-name/userdata_x: Permission denied"
+    $KEEPFORCEENCRYPT && patch_sepolicy '"(permissive vold)"' '"allow vold * * *"'
+
+    if [ "$layout" == "a/b/c" ]; then
+      $magisk || patch_sepolicy '"(permissive shell)\n(allow init media_rw_data_file dir mounton)"' '"allow shell * * *" "allow init media_rw_data_file dir mounton" "allow fsck block_device blk_file { ioctl read write getattr lock append map open }"'
+
+      ui_print "  Installing commondata mount script"
+      mkdir /system_root/datacommon /system_root/metadatacommon 2>/dev/null
+      set_perm_recursive /system_root/datacommon media_rw media_rw 0771 u:object_r:media_rw_data_file:s0
+      set_perm_recursive /system_root/metadatacommon root root 0755 u:object_r:metadata_file:s0
+      cp -f $tmp/init.mount_datacommon.sh /system_root/init.mount_datacommon.sh
+      set_perm /system_root/init.mount_datacommon.sh 0 2000 0755 u:object_r:shell_exec:s0
+      echo -e "\n# Zackptg5-DualBootMod\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh" >> /system_root/init.rc
+    fi
+
+    # Un/Install Magisk, patch verity otherwise since we're modifying system
+    [ "$layout" == "stock" ] && mount "/dev/block/bootdevice/by-name/userdata" /data || mount "/dev/block/bootdevice/by-name/userdata$slot" /data
+    if $magisk; then
+      . magisk.sh
+    else
+      ui_print "  Patching ramdisk"
+      magiskboot cpio ramdisk.cpio patch
+      rm -rf \
+      /cache/*magisk* /cache/unblock /data/*magisk* /data/cache/*magisk* /data/property/*magisk* \
+      /data/Magisk.apk /data/busybox /data/custom_ramdisk_patch.sh /data/adb/*magisk* \
+      /data/adb/post-fs-data.d /data/adb/service.d /data/adb/modules* $PERSISTDIR/magisk \
+      /system/addon.d/99-magisk.sh \
+      /data/user*/*/*magisk* /data/app/*magisk* 2>/dev/null
+    fi
+
+    binary_patches
+    patch_dtb_partitions
+    $magiskdata && run_migrations
+
+    # Patch vendor fstabs
+    FSTABS="$(find /system_root /vendor/etc /odm/etc -maxdepth 1 -type f -name "fstab.qcom" | sed 's|^./|/|')"
+    [ "$FSTABS" ] && patch_fstabs
+  else
+    ui_prints " "
+    ui_print "  No OS installed to $slot_select slot: $slot!"
+    ui_print "  Skipping non-boot img related functions!"
+    ui_print "  Flash this zip again after installing OS to slot $slot"
+    ui_print " "
+  fi
+
+  # Repack
+  ui_print "  Repacking boot img"
+  magiskboot repack boot.img new-boot.img
+  cat new-boot.img /dev/zero > $target$slot 2>/dev/null || true
+  magiskboot cleanup
+  
+  cd $tmp
+  rm -rf boot
+
+  umount -f /system
+  sleep 0.5
+  unmountAllAndRefreshPartitions
+done
+
+umount -l /dev/random 2>/dev/null
+[ -z $OLD_LD_LIB ] || export LD_LIBRARY_PATH=$OLD_LD_LIB
+[ -z $OLD_LD_PRE ] || export LD_PRELOAD=$OLD_LD_PRE
+[ -z $OLD_LD_CFG ] || export LD_CONFIG_FILE=$OLD_LD_CFG
+
+cd /
+rm -rf /dev/tmp
+
+ui_print " "
+$magisk && ui_print "- Done installing TWRP + Magisk!" || { ui_print "- Done installing TWRP!"; ui_print " "; ui_print "*** NOTE: You are now unrooted! ***"; }
+ui_print " "
+
+mount /data
+exit 0
