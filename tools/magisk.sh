@@ -1,7 +1,7 @@
 ui_print "  Installing magisk 20.3"
 MAGISKBIN=/data/adb/magisk
-magiskdata=true
-$stock && [ "$slot_select" == "inactive" ] && magiskdata=false
+$mountdata && magiskdata=true || magiskdata=false
+[ "$layout" == "stock" ] && [ "$slot_select" == "inactive" ] && magiskdata=false
 
 # Copy required files
 if $magiskdata; then

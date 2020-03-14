@@ -11,8 +11,9 @@ OUTFD=/proc/self/fd/$2
 ZIPFILE="$3"
 tmp=/dev/tmp/twrp-install
 target=/dev/block/bootdevice/by-name/boot
-format=true
+format=false
 magiskdata=false
+mountdata=true
 KEEPVERITY=false
 RECOVERYMODE=false
 PERSISTDIR=/persist
@@ -77,80 +78,104 @@ cd $tmp
 # Get current layout
 if [ "$(sgdisk --print /dev/block/sda | grep -i userdata2)" ]; then
   curlayout="a/b/c"
-  ui_print "- Current layout is: A/B with common data partition"
 elif [ "$(sgdisk --print /dev/block/sda | grep -i userdata_a)" ]; then
   curlayout="a/b"
-  ui_print "- Current layout is: a/b"
 else
   curlayout="stock"
-  ui_print "- Current layout is: stock"
 fi
-# Set new layout
-ui_print "  Keep current layout?"
-ui_print "  Vol+ yes, Vol- no"
-if chooseport; then
-  layout="$curlayout"
+
+# Script can't format actively decrypted userdata
+if mount | grep '/dev/block/dm-0'; then
+  ui_print "  Mounted userdata is currently encrypted!"
+  ui_print "  This script is unable to format it"
+  ui_print "  If you want to repartition/format,"
+  ui_print "  format data in TWRP gui, then run this zip"
   ui_print " "
-  ui_print "- Reformat Data as Ext4 or F2FS?"
+  ui_print "  If you don't want to change anything, continue"
+  ui_print " "
+  sleep 3
+  ui_print "- Continue?"
+  ui_print "  Vol+ yes, Vol- no"
+  chooseport && { mountdata=false; layout=$curlayout; } || exit 0
+fi
+
+ui_print "- Current layout is: $curlayout"
+# Set new layout
+if [ ! "$layout" ]; then
+  ui_print "  Keep current layout?"
   ui_print "  Vol+ yes, Vol- no"
   if chooseport; then
-    ui_print " "
-    ui_print "- Ext4 or F2FS?"
-    ui_print "  Note that your kernel must be f2fs compatible"
-    ui_print "  Vol+ Ext4 (Stock/Recommended), Vol- F2FS"
-    chooseport && type="ext4" || type="f2fs"
+    layout="$curlayout"
+    if [ "$layout" == "a/b/c" ]; then
+      ui_print " "
+      ui_print "  Remember that magisk is required for a/b/c"
+      ui_print "  and will be auto-selected for install"
+    fi
   else
-    format=false
-  fi
-else
-  ui_print " "
-  ui_print "- Switch to a/b/(c) userdata or stock?"
-  ui_print "  Vol+ a/b/(c), Vol- stock"
-  if chooseport; then
+    format=true
     ui_print " "
-    ui_print "- Have a common data partition or pure a/b?"
-    ui_print "  Vol+ a/b/c, Vol- a/b only"
-    chooseport && layout="a/b/c" || layout="a/b"
-  else
-    layout="stock"
+    ui_print "- Switch to a/b/(c) userdata or stock?"
+    ui_print "  Vol+ a/b/(c), Vol- stock"
+    if chooseport; then
+      ui_print " "
+      ui_print "- Have a common data partition or pure a/b?"
+      ui_print "  Note that common data partition is not encryptable"
+      ui_print "  Magisk is required for a/b/c"
+      ui_print "  Vol+ a/b/c, Vol- a/b only"
+      chooseport && layout="a/b/c" || layout="a/b"
+    else
+      layout="stock"
+    fi
+    [ "$layout" == "$curlayout" ] && format=false
   fi
-  ui_print " "
-  ui_print "- Format Data as Ext4 or F2FS?"
-  ui_print "  Note that your kernel must be f2fs compatible"
-  ui_print "  Vol+ Ext4 (Stock/Recommended), Vol- F2FS"
-  chooseport && type="ext4" || type="f2fs"
 fi
 # Set other args
-ui_print " "
-ui_print "- Forced Encryption: Enable or Disable?"
-ui_print "  Vol+ Enable, Vol- Disable"
-chooseport && KEEPFORCEENCRYPT=true || KEEPFORCEENCRYPT=false
-if [ "$layout" == "a/b/c" ]; then
+if [ "$layout" == "stock" ]; then
   ui_print " "
-  ui_print "  Enable for common data partition?"
-  ui_print "  Choose 'Disable' if each slot has a different rom"
-  ui_print "  Vol+ Enable, Vol- Disable"
-  chooseport && commonforceencrypt=true || commonforceencrypt=false
+  ui_print "- Dm-Verity: Keep as is or Disable??"
+  ui_print "  If you made ANY modifications outside of data"
+  ui_print "  this should be disabled"
+  ui_print "  Vol+ Do not change, Vol- Disable (Recommended)"
+  chooseport && KEEPVERITY=true
 fi
 ui_print " "
-ui_print "- Install magisk to both slots?"
-ui_print "  Vol+ yes, Vol- no"
-chooseport && magisk=true || magisk=false
+ui_print "- Forced Encryption: Keep as is or Disable?"
+ui_print "  Vol+ Do not change, Vol- Disable"
+chooseport && KEEPFORCEENCRYPT=true || KEEPFORCEENCRYPT=false
+# Magisk is required for common data mounting in oos - even permissive selinux won't cut it - problem occurs with modification to fstab - too early in boot to debug
+if [ "$layout" == "a/b/c" ]; then
+  magisk=true
+else
+  ui_print " "
+  ui_print "- Install magisk to both slots?"
+  ui_print "  Vol+ yes, Vol- no"
+  chooseport && magisk=true || magisk=false
+fi
+if $magisk && ! $mountdata; then
+  ui_print " "
+  ui_print "  Magisk will patch boot img only"
+  ui_print "  You'll need to install the apk normally"
+  ui_print "  And it'll prompt you to install the rest"
+  sleep 3
+fi
 ui_print " "
 ui_print "- Selected Options"
-ui_print "  Layout: $curlayout -> $layout"
-$format && ui_print "  Format Data: Yes -> $type" || ui_print "  Format Data: No"
-$KEEPFORCEENCRYPT && ui_print "  Forced Encryption: Enabled" || ui_print "  Forced Encryption: Disabled"
-[ "$commonforceencrypt" ] && { $commonforceencrypt && ui_print "  Common Data Forced Encryption: Enabled" || ui_print "  Common Data Forced Encryption: Disabled"; }
-ui_print "  Dm-Verity: Disabled"
+if $format; then
+  ui_print "  Layout: $curlayout -> $layout"
+  ui_print "  Format Data: Yes"
+else
+  ui_print "  Layout: $curlayout"
+  ui_print "  Format Data: No"
+fi
+$KEEPFORCEENCRYPT && ui_print "  Forced Encryption: Enabled/Not Changed" || ui_print "  Forced Encryption: Disabled"
+$KEEPVERITY && ui_print "  Dm-Verity: Enabled/Not Changed" || ui_print "  Dm-Verity: Disabled"
 $magisk && ui_print "  Root: Magisk" || ui_print "  Root: None"
 sleep 1
 ui_print " "
 ui_print "- Last Chance - Are you sure?"
-$format && ui_print "  All data including internal storage will be wiped"
-[ "$layout" == "$curlayout" ] && ui_print "  No repartitioning will be needed"
+$format && { ui_print "  All data including internal storage will be wiped"; sleep 1; }
 ui_print "  Vol+ yes, Vol- no (exit installer)"
-chooseport && ui_print " " || { ui_print " "; abort "Exiting installer!"; }
+chooseport && ui_print " " || { ui_print " "; ui_print "Exiting installer!"; exit 0; }
 ui_print "- Beginning install"
 export KEEPVERITY
 export KEEPFORCEENCRYPT
@@ -162,7 +187,7 @@ if [ "$layout" != "stock" ]; then
   magiskboot cpio ramdisk-recovery.cpio "add 0644 etc/recovery.wipe recovery.wipe"
   magiskboot cpio ramdisk-recovery.cpio "extract etc/twrp.fstab twrp.fstab"
   sed -ri -e 's|(/userdata.*flags=)|\1slotselect;|' -e 's|(.*name/metadata) *|\1\t\t\t\t\tflags=slotselect;backup=0;display="Metadata"|' twrp.fstab
-  [ "$layout" == "a/b/c" ] && { sed -i '\|/data|a/datacommon\t\text4\t/dev/block/bootdevice/by-name/userdata2\t\t\t\t\tflags=display="Common Storage";wipeingui;storage;fileencryption=ice:aes-256-cts;keydirectory=/metadatacommon/vold/metadata_encryption\n/metadatacommon\text4\t/dev/block/bootdevice/by-name/metadata2\t\t\t\t\tflags=backup=0;display="Common Metadata"' twrp.fstab; magiskboot cpio ramdisk-recovery.cpio "mkdir 0771 datacommon"; }
+  [ "$layout" == "a/b/c" ] && { sed -i '\|/data|a/datacommon\t\text4\t/dev/block/bootdevice/by-name/userdata2\t\t\t\t\tflags=display="Common Storage";wipeingui;storage' twrp.fstab; magiskboot cpio ramdisk-recovery.cpio "mkdir 0771 datacommon"; }
   magiskboot cpio ramdisk-recovery.cpio "add 0644 etc/twrp.fstab twrp.fstab"
 fi
 # Add missing useful binaries
@@ -177,6 +202,10 @@ if [ "$layout" != "$curlayout" ]; then
 elif $format; then
   format_userdata
 fi
+blockdev --rereadpt /dev/block/sda
+sleep 0.2
+sync
+sleep 0.2
 
 # Everything else
 for slot_select in active inactive; do
@@ -208,58 +237,70 @@ for slot_select in active inactive; do
   mount /dev/block/bootdevice/by-name/persist /persist
 
   if [ -f /system/build.prop ]; then
-    rm -rf /system_root/datacommon /system_root/metadatacommon /system_root/init.mount_datacommon.sh
-    [ "$(grep '# Zackptg5-DualBoot' /system_root/init.rc)" ] && sed -i -e "/# Zackptg5-DualBootMod/,/init.mount_datacommon.sh/d" -e "$d" /system_root/init.rc
-    while true; do 
-      [ "$(tail -n1 /system_root/init.rc)" ] && break || sed -i '$d' /system_root/init.rc
-    done
+    if ! $KEEPVERITY; then
+      rm -rf /system_root/datacommon /system_root/init.mount_datacommon.sh
+      [ "$(grep '# Zackptg5-DualBoot' /system_root/init.rc)" ] && sed -i -e "/# Zackptg5-DualBootMod/,/init.mount_datacommon.sh/d" -e "$d" /system_root/init.rc
+      while true; do 
+        [ "$(tail -n1 /system_root/init.rc)" ] && break || sed -i '$d' /system_root/init.rc
+      done
 
-    # Get location of sepolicy
-    $magisk && context=magisk || context=shell
-    [ -f /system/etc/selinux/plat_sepolicy.cil.bak ] && mv -f /system/etc/selinux/plat_sepolicy.cil.bak /system/etc/selinux/plat_sepolicy.cil
-    if [ -f /system/etc/selinux/plat_sepolicy.cil ]; then
-      # Split policy
-      if [ -f /odm/etc/selinux/precompiled_sepolicy ]; then
-        file=/odm/etc/selinux/precompiled_sepolicy
-      elif [ -f /vendor/etc/selinux/precompiled_sepolicy ]; then
-        file=/vendor/etc/selinux/precompiled_sepolicy
-      elif [ -e /system_root/force_debuggable ] && [ -f /system_root/adb_debug.prop ] && [ -f /system_root/userdebug_plat_sepolicy.cil ]; then
-        # Completely untested
-        file=/system_root/userdebug_plat_sepolicy.cil
-      else
-        # file=/system/etc/selinux/plat_sepolicy.cil
-        # Modifying cil ends up in QCOM Fastboot so we'll force monolithic creation instead
+      # Get location of sepolicy
+      $magisk && context=magisk || context=shell
+      [ -f /system/etc/selinux/plat_sepolicy.cil.bak ] && mv -f /system/etc/selinux/plat_sepolicy.cil.bak /system/etc/selinux/plat_sepolicy.cil
+      if [ -f /system/etc/selinux/plat_sepolicy.cil ]; then
+        # Split policy
+        if [ -f /odm/etc/selinux/precompiled_sepolicy ]; then
+          file=/odm/etc/selinux/precompiled_sepolicy
+        elif [ -f /vendor/etc/selinux/precompiled_sepolicy ]; then
+          file=/vendor/etc/selinux/precompiled_sepolicy
+        # elif [ -e /system_root/force_debuggable ] && [ -f /system_root/adb_debug.prop ] && [ -f /system_root/userdebug_plat_sepolicy.cil ]; then
+          # file=/system_root/userdebug_plat_sepolicy.cil
+        else
+          # file=/system/etc/selinux/plat_sepolicy.cil
+          # Modifying cil ends up in QCOM Fastboot so we'll force monolithic creation instead
+          file=/system_root/sepolicy
+          rm -f $file
+          magiskpolicy --compile-split --save $file
+          mv -f /system/etc/selinux/plat_sepolicy.cil /system/etc/selinux/plat_sepolicy.cil.bak
+        fi
+      # Monolithic policy
+      elif [ -f /system_root/sepolicy ]; then
         file=/system_root/sepolicy
-        rm -f $file
-        magiskpolicy --compile-split --save $file
-        mv -f /system/etc/selinux/plat_sepolicy.cil /system/etc/selinux/plat_sepolicy.cil.bak
+      else
+        # Ramdisk sepolicy is for recovery only
+        abort "  Sepolicy not found! Report to @Zackptg5"
       fi
-    # Monolithic policy
-    elif [ -f /system_root/sepolicy ]; then
-      file=/system_root/sepolicy
-    else
-      # Ramdisk sepolicy is for recovery only
-      abort "  Sepolicy not found! Report to @Zackptg5"
+
+      # (permissive vold) (permissive shell)\n(allow init media_rw_data_file dir mounton)
+      # if [ "$(echo $file | awk -F '.' '{print $NF}')" == "cil" ] && [ ! "$(grep "$1" $file)" ]; then
+      #   echo "$1" >> $file
+      #   # Regenerate sha256sum - note that order of files matters (main file followed by mapping)
+      #   [ "$file" == "/system/etc/selinux/plat_sepolicy.cil" ] && cat $file /system/etc/selinux/mappings/$(cat /vendor/etc/selinux/plat_sepolicy_vers.txt).cil | sha256sum -b > /system/etc/selinux/plat_sepolicy_and_mapping.sha256
+      # else
+      #   magiskpolicy --load $file --save $file $2
+      # fi
+
+      ui_print "  Patching sepolicy"
+      # Needed for encryption -> "Unable to measure size of /dev/block/bootdevice/by-name/userdata_x: Permission denied"
+      $KEEPFORCEENCRYPT && magiskpolicy --load $file --save $file "allow vold * * *"
+
+      if [ "$layout" == "a/b/c" ]; then
+        magiskpolicy --load $file --save $file "allow init media_rw_data_file dir mounton" "allow fsck block_device blk_file { ioctl read write getattr lock append map open }"
+        $magisk || magiskpolicy --load $file --save $file "allow shell * * *"
+
+        ui_print "  Installing commondata mount script"
+        mkdir /system_root/datacommon 2>/dev/null
+        set_perm /system_root/datacommon media_rw media_rw 0771 u:object_r:media_rw_data_file:s0
+        cp -f $tmp/init.mount_datacommon.sh /system_root/init.mount_datacommon.sh
+        set_perm /system_root/init.mount_datacommon.sh 0 2000 0755 u:object_r:shell_exec:s0
+        echo -e "\n# Zackptg5-DualBootMod\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh" >> /system_root/init.rc
+      fi
     fi
 
-    ui_print "  Patching sepolicy"
-    # Needed for encryption -> "Unable to measure size of /dev/block/bootdevice/by-name/userdata_x: Permission denied"
-    $KEEPFORCEENCRYPT && patch_sepolicy '"(permissive vold)"' '"allow vold * * *"'
-
-    if [ "$layout" == "a/b/c" ]; then
-      $magisk || patch_sepolicy '"(permissive shell)\n(allow init media_rw_data_file dir mounton)"' '"allow shell * * *" "allow init media_rw_data_file dir mounton" "allow fsck block_device blk_file { ioctl read write getattr lock append map open }"'
-
-      ui_print "  Installing commondata mount script"
-      mkdir /system_root/datacommon /system_root/metadatacommon 2>/dev/null
-      set_perm_recursive /system_root/datacommon media_rw media_rw 0771 u:object_r:media_rw_data_file:s0
-      set_perm_recursive /system_root/metadatacommon root root 0755 u:object_r:metadata_file:s0
-      cp -f $tmp/init.mount_datacommon.sh /system_root/init.mount_datacommon.sh
-      set_perm /system_root/init.mount_datacommon.sh 0 2000 0755 u:object_r:shell_exec:s0
-      echo -e "\n# Zackptg5-DualBootMod\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh" >> /system_root/init.rc
+    # Un/Install Magisk, patch verity otherwise since we're likely modifying system
+    if $mountdata; then
+      [ "$layout" == "stock" ] && mount "/dev/block/bootdevice/by-name/userdata" /data || mount "/dev/block/bootdevice/by-name/userdata$slot" /data
     fi
-
-    # Un/Install Magisk, patch verity otherwise since we're modifying system
-    [ "$layout" == "stock" ] && mount "/dev/block/bootdevice/by-name/userdata" /data || mount "/dev/block/bootdevice/by-name/userdata$slot" /data
     if $magisk; then
       . magisk.sh
     else
@@ -279,12 +320,12 @@ for slot_select in active inactive; do
 
     # Patch vendor fstabs
     FSTABS="$(find /system_root /vendor/etc /odm/etc -maxdepth 1 -type f -name "fstab.qcom" | sed 's|^./|/|')"
-    [ "$FSTABS" ] && patch_fstabs
+    [ "$FSTABS" ] && ! $KEEPVERITY && patch_fstabs
   else
-    ui_prints " "
-    ui_print "  No OS installed to $slot_select slot: $slot!"
+    ui_print " "
+    ui_print "  No OS installed to this slot!"
     ui_print "  Skipping non-boot img related functions!"
-    ui_print "  Flash this zip again after installing OS to slot $slot"
+    ui_print "  Flash this zip again after installing OS"
     ui_print " "
   fi
 

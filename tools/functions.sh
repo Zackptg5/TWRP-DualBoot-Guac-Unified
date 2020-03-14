@@ -24,17 +24,7 @@ unmountAllAndRefreshPartitions() {
 	sleep 1
 	kill `pidof qseecomd` 2>/dev/null
 	blockdev --rereadpt /dev/block/sda
-}
-
-format_part() {
-  local partnum=$1 partsize=$2
-  [ -z "$partnum" ] && abort "Formatting error!"
-  [ "$(sgdisk --print /dev/block/sda$partnum 2>/dev/null)" ] || abort "Formatting error!"
-  if [ "$type" == "ext4" ]; then
-    mke2fs -F -t ext4 -b 4096 /dev/block/sda$partnum $partsize
-  else
-    mkfs.f2fs -d1 -f -O encrypt -O quota -O verity -w 4096 /dev/block/sda$partnum $partsize
-  fi
+  sleep 0.5
 }
 
 change_part() {
@@ -44,7 +34,12 @@ change_part() {
     "delete") sgdisk /dev/block/sda --delete $partnum;;
     "new") sgdisk /dev/block/sda --new=$partnum;;
     "change-name") sgdisk /dev/block/sda --change-name=$partnum;;
-    "format") format_part $partnum;;
+    "format")
+      local partsize=$(sgdisk --print /dev/block/sda | grep "^ *$partnum" | awk '{print $3-$2+1}')
+      [ -z "$partsize" ] && abort "Formatting error!"
+      [ "$(sgdisk --print /dev/block/sda | grep "^ *$partnum" 2>/dev/null)" ] || abort "Formatting error!"
+      mke2fs -F -F -t ext4 -b 4096 /dev/block/sda$partnum $partsize
+      ;;
     *) abort "Partitioning error!";;
   esac
   [ $? -eq 0 ] || abort "Partitioning error! You'll need to fix it manually!"
@@ -58,10 +53,6 @@ stock_userdata() {
 	userdata_b_partnum=$(echo "$userdata_b_partline" | awk '{ print $1 }')
 
 	if [ "$curlayout" == "a/b/c" ]; then
-    metadata_c_partline=$(sgdisk --print /dev/block/sda | grep -i 'metadata2')
-		metadata_c_partnum=$(echo "$metadata_c_partline" | awk '{ print $1 }')
-		change_part delete $metadata_c_partnum
-
 		userdata_c_partline=$(sgdisk --print /dev/block/sda | grep -i 'userdata2')
 		userdata_c_partnum=$(echo "$userdata_c_partline" | awk '{ print $1 }')
 		userdata_c_partend=$(echo "$userdata_c_partline" | awk '{ print $3 }')
@@ -95,12 +86,8 @@ slot_userdata() {
     userdata_b_partend=`echo $((userdata_b_partstart+userdata_newpartsize))`
 		userdata_b_partnum=`echo $((metadata_b_partnum+1))`
 
-    metadata_c_partstart=`echo $((userdata_b_partend+1))`
-    metadata_c_partend=`echo $((metadata_c_partstart+metadata_partsize))`
-    metadata_c_partnum=`echo $((userdata_b_partnum+1))`
-
-		userdata_c_partstart=`echo $((metadata_c_partend+1))`
-		userdata_c_partnum=`echo $((metadata_c_partnum+1))`
+		userdata_c_partstart=`echo $((userdata_b_partend+1))`
+		userdata_c_partnum=`echo $((userdata_b_partnum+1))`
 	else
 		# Cut it in half
 		userdata_length=`echo $((userdata_partend-userdata_partstart))`
@@ -124,27 +111,19 @@ slot_userdata() {
 	change_part new $userdata_b_partnum:$userdata_b_partstart:$userdata_b_partend
   change_part change-name $userdata_b_partnum:userdata_b
 	if [ "$layout" == "a/b/c" ]; then
-    change_part new $metadata_c_partnum:$metadata_c_partstart:$metadata_c_partend
-    change_part change-name $metadata_c_partnum:metadata2
     change_part new $userdata_c_partnum:$userdata_c_partstart:$userdata_partend
     change_part change-name $userdata_c_partnum:userdata2
-  fi  
-  blockdev --rereadpt /dev/block/sda
-	sleep 1
-	ui_print "  Formatting new userdata and metadata partitions"
-	change_part format $metadata_partnum
-	change_part format $metadata_b_partnum
-	change_part format $userdata_partnum
-	change_part format $userdata_b_partnum
-  if [ "$layout" == "a/b/c" ]; then
-    change_part format $metadata_c_partnum
-	  change_part format $userdata_c_partnum
   fi
+  blockdev --rereadpt /dev/block/sda
+	sleep 0.5
+	ui_print "  Formatting new userdata and metadata partitions"
+	change_part format $userdata_partnum
+	change_part format $metadata_partnum
+	change_part format $userdata_b_partnum
+	change_part format $metadata_b_partnum
+  [ "$layout" == "a/b/c" ] && change_part format $userdata_c_partnum
   ui_print "  Userdata has been partitioned to $layout"
-	blockdev --rereadpt /dev/block/sda
-	sleep 0.2
-	sync /dev/block/sda
-	sleep 0.2
+
 }
 
 repartition_userdata() {
@@ -166,15 +145,11 @@ repartition_userdata() {
       ui_print "- Repartitioning userdata back to stock"
       stock_userdata   
       blockdev --rereadpt /dev/block/sda
-      sleep 1
+      sleep 0.5
       ui_print "  Formatting userdata and metadata"
       change_part format $userdata_partnum
       change_part format $metadata_partnum
-      ui_print "  Userdata has been repartitioned back to stock (non-ab)"
-      blockdev --rereadpt /dev/block/sda
-      sleep 0.2
-      sync /dev/block/sda
-      sleep 0.2
+      ui_print "  Userdata has been repartitioned back to stock"
       ;;
     *)
       ui_print "- Repartitioning userdata to $layout"
@@ -182,28 +157,25 @@ repartition_userdata() {
       slot_userdata
       ;;
   esac
-  [ "$type" == "ext4" ] && e2fsdroid -e -S /file_contexts -a /data /dev/block/sda$userdata_partnum || sload.f2fs -t /data /dev/block/sda$userdata_partnum
+  e2fsdroid -e -S /file_contexts -a /data /dev/block/sda$userdata_partnum
+  e2fsdroid -e -S /file_contexts -a /metadata /dev/block/sda$metadata_partnum
 }
 
 format_userdata() {
   ui_print " "
-  ui_print "- Formatting userdata"
-  for i in userdata userdata_a userdata_b userdata2; do
+  ui_print "- Formatting userdata and metadata"
+  case $layout in 
+    "stock") local userdata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'userdata$' | awk '{ print $1 }') metadata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'metadata$' | awk '{ print $1 }');;
+    *) local userdata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'userdata_a$' | awk '{ print $1 }') metadata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'metadata_a$' | awk '{ print $1 }');;
+  esac
+  for i in userdata metadata userdata_a metadata_a userdata_b metadata_b userdata2; do
     local partnum=$(sgdisk --print /dev/block/sda | grep -i "$i$" | awk '{ print $1 }')
     [ "$partnum" ] || continue
-    local partsize=$(sgdisk --print /dev/block/sda | grep -i "$i$" | awk '{print $3-$2+1}')
-    format_part $partnum $partsize
+    change_part format $partnum
   done
-  ui_print "  Userdata has been formatted to $type"
-  blockdev --rereadpt /dev/block/sda
-	sleep 0.2
-	sync /dev/block/sda
-	sleep 0.2
-  case $layout in 
-    "stock") local userdata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'userdata$' | awk '{ print $1 }');;
-    *) local userdata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'userdata_a$' | awk '{ print $1 }');;
-  esac
-  [ "$type" == "ext4" ] && e2fsdroid -e -S /file_contexts -a /data /dev/block/sda$userdata_partnum || sload.f2fs -t /data /dev/block/sda$userdata_partnum
+  e2fsdroid -e -S /file_contexts -a /data /dev/block/sda$userdata_partnum
+  e2fsdroid -e -S /file_contexts -a /metadata /dev/block/sda$metadata_partnum
+  ui_print "  Userdata and metadata have been formatted"
 }
 
 reset_slot() {
@@ -227,16 +199,6 @@ reset_slot() {
   [ -z $slot ] && abort "Unable to determine active boot slot! Aborting!"
 }
 
-patch_sepolicy() {
-  if [ "$(echo $file | awk -F '.' '{print $NF}')" == "cil" ] && [ ! "$(grep "$1" $file)" ]; then
-    echo "$1" >> $file
-    # Regenerate sha256sum - note that order of files matters (main file followed by mapping)
-    [ "$file" == "/system/etc/selinux/plat_sepolicy.cil" ] && cat $file /system/etc/selinux/mappings/$(cat /vendor/etc/selinux/plat_sepolicy_vers.txt).cil | sha256sum -b > /system/etc/selinux/plat_sepolicy_and_mapping.sha256
-  else
-    magiskpolicy --load $file --save $file $2
-  fi
-}
-
 patch_fstabs() {
 	ui_print "  Patching fstabs:"
 	for i in $FSTABS; do
@@ -251,25 +213,17 @@ patch_fstabs() {
       s/,support_scfs|support_scfs,|support_scfs\b//g
       s/,fsverity|fsverity,|fsverity\b//g
     " "$i"
-    if $KEEPFORCEENCRYPT; then
-      sed -ri "s/,=(.*,keydirectory=)/,fileencryption=\1/g" $i
-    else
-      sed -i "s/fileencryption=/=/g" $i
-    fi
-    sed -ri "/data2|metadata2/d" $i
+    $KEEPFORCEENCRYPT || sed -i "s/fileencryption=/=/g" $i
+    sed -i "/data2/d" $i
 		sed -ri "/name\/userdata |name\/metadata / s/wait,slotselect/wait/" $i
     while true; do
-      [ "$(tail -n1 $i)" ] && { echo " " >> $i; break; } || sed -i '$d' $i
+      [ "$(tail -n1 $i)" ] && { echo >> $i; break; } || sed -i '$d' $i
     done
     if [ "$layout" != "stock" ]; then
       if [ "$layout" == "a/b/c" ]; then
-        local ext4metaline="$(sed -n "\|^/dev/block/bootdevice/by-name/metadata */metadata *ext4|p" $i | sed -e "s|name/metadata|name/metadata2|" -e "s| /metadata|/metadatacommon|")"
-        local f2fsmetaline="$(sed -n "\|^/dev/block/bootdevice/by-name/metadata */metadata *f2fs|p" $i | sed -e "s|name/metadata|name/metadata2|" -e "s| /metadata|/metadatacommon|")"
-        local ext4dataline="$(sed -n "\|^/dev/block/bootdevice/by-name/userdata */data *ext4|p" $i | sed -e "s|userdata|userdata2|" -e "s|/data|/datacommon|" -e "s|/metadata/|/metadatacommon/|")"
-        local f2fsdataline="$(sed -n "\|^/dev/block/bootdevice/by-name/userdata */data *f2fs|p" $i | sed -e "s|userdata|userdata2|" -e "s|/data|/datacommon|" -e "s|/metadata/|/metadatacommon/|")"
-        for j in ext4metaline f2fsmetaline ext4dataline f2fsdataline; do
-          [ "$(eval echo \$$j)" ] || continue
-          $commonforceencrypt && echo "$(eval echo \$$j | sed -r 's/,=(.*,keydirectory=)/,fileencryption=\1/')" >> $i || echo "$(eval echo \$$j | sed 's/fileencryption=/=/')" >> $i
+        for j in ext4 f2fs; do
+          local k="$(sed -n "\|^/dev/block/bootdevice/by-name/userdata */data *$j|p" $i | sed -e "s|userdata|userdata2|" -e "s|/data|/datacommon|")"
+          [ "$(eval echo \$k)" ] && echo "$(eval echo \$k | sed 's/fileencryption=.*metadata_encryption,//')" >> $i
         done
       fi
       sed -ri "/name\/userdata |name\/metadata / s/wait,/wait,slotselect,/" $i
@@ -414,13 +368,4 @@ set_perm() {
   CON=$5
   [ -z $CON ] && CON=u:object_r:system_file:s0
   chcon $CON $1 || return 1
-}
-
-set_perm_recursive() {
-  find $1 -type d 2>/dev/null | while read dir; do
-    set_perm $dir $2 $3 $4 $6
-  done
-  find $1 -type f -o -type l 2>/dev/null | while read file; do
-    set_perm $file $2 $3 $5 $6
-  done
 }
