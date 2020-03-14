@@ -11,7 +11,7 @@ Make sure you have a backup and know how to reparititon your phone back to stock
 ## Some other features/notes
 * Can choose between stock layout, a/b userdata, or a/b/c userdata where 'c' is a common data partition that'll show up in both roms - it's quite handy
 * Disables verity - fstabs are modified for dual boot and so this is a must unless you choose stock layout in which case it's optional
-* Optional disable or enable forced encryption
+* Option to disable forced encryption
 * Option to install magisk - this is mandatory with a/b/c layout
 
 ## Common Data
