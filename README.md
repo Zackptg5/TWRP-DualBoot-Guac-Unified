@@ -30,7 +30,7 @@ Make sure you have a backup and know how to reparititon your phone back to stock
     * The reasoning should be obvious - each data partition has it's own TWRP folder, lost+found isn't something you should need to mess with, and Android is for regular data partition only - that's OS specific and should be on separate slots
 
 ## Flashing Instructions
-* You MUST be booted into TWRP already when flashing this zip ([you can grab a bootable twrp image from here](https://forum.xda-developers.com/oneplus-7-pro/development/recovery-unofficial-twrp-recovery-t3931322))
+* You MUST be booted into TWRP already when flashing this zip ([you can grab a bootable twrp image from here](https://forum.xda-developers.com/oneplus-7/oneplus-7--7-pro-cross-device-development/recovery-unofficial-twrp-recovery-t3932943))
 * Since this modifies data - the zip CANNOT be on sdcard or data at all
   * If you flash from data, the zip will copy itself to /tmp and instruct you to flash it from there
   * You could do the above or copy it to a place like /dev or /tmp and flash it from there
