@@ -27,9 +27,44 @@ unmountAllAndRefreshPartitions() {
   sleep 0.5
 }
 
+select_size() {
+  ui_print " "
+  ui_print "- Supported Partition Sizes for userdata:"
+  [ $totsize -gt 128 ] && local sizes="16, 32, 64, or 96 gb" || local sizes="16 or 32 gb"
+  ui_print "  $sizes"
+  ui_print "  Common Data takes up whatever is left"
+  sleep 2
+  ui_print " "
+  ui_print "  Choose Userdata Size:"
+  for i in 16 32 64 96; do
+    [ "$sizes" == "or $i gb" ] && { size=$i; return 0; }
+    sizes="$(echo $sizes | sed -r "s/^$i, |^$i //g")"
+    ui_print "  Vol+ $i gb; Vol- $sizes"
+    chooseport && { size=$i; return 0; }
+    ui_print " "
+  done
+}
+
+select_format() {
+  ui_print " "
+  ui_print "- Ext4 or F2FS?"
+  ui_print "  Note that your kernel must be f2fs compatible"
+  ui_print "  Vol+ Ext4 (Recommended), Vol- F2FS"
+  if [ "$layout" == "stock" ]; then
+    chooseport && typea="ext4" || typea="f2fs"
+  else
+    [ "$layout" == "a/b/c" ] && local slots="a b c" || local slots="a b"
+    for i in $slots; do
+      ui_print "  Slot $i?"
+      chooseport && eval type$i="ext4" || eval type$i="f2fs"
+    done
+  fi
+}
+
 change_part() {
-  local action=$1 partnum=$2
+  local action=$1 partnum=$2 parttype=$3
   [ -z "$partnum" ] && abort "Partitioning error!"
+  [ -z "$parttype" ] && parttype=ext4
   case $action in
     "delete") sgdisk /dev/block/sda --delete $partnum;;
     "new") sgdisk /dev/block/sda --new=$partnum;;
@@ -37,8 +72,15 @@ change_part() {
     "format")
       local partsize=$(sgdisk --print /dev/block/sda | grep "^ *$partnum" | awk '{print $3-$2+1}')
       [ -z "$partsize" ] && abort "Formatting error!"
-      [ "$(sgdisk --print /dev/block/sda | grep "^ *$partnum" 2>/dev/null)" ] || abort "Formatting error!"
-      mke2fs -F -F -t ext4 -b 4096 /dev/block/sda$partnum $partsize
+      local partname="$(sgdisk --print /dev/block/sda | grep "^ *$partnum" | awk '{gsub("_.*","",$7); print $7}' 2>/dev/null)"
+      [ -z "$partname" ] && abort "Formatting error!"
+      if [ "$parttype" == "ext4" ]; then
+        mke2fs -F -F -t ext4 -b 4096 /dev/block/sda$partnum $partsize
+        [ "$partname" == "metadata" ] && e2fsdroid -e -S /file_contexts -a /metadata /dev/block/sda$partnum || e2fsdroid -e -S /file_contexts -a /data /dev/block/sda$partnum
+      else
+        mkfs.f2fs -d1 -f -O encrypt -O quota -O verity -w 4096 /dev/block/sda$partnum $partsize
+        [ "$partname" == "metadata" ] && sload.f2fs -t /metadata /dev/block/sda$partnum || sload.f2fs -t /data /dev/block/sda$partnum
+      fi
       ;;
     *) abort "Partitioning error!";;
   esac
@@ -74,8 +116,8 @@ slot_userdata() {
   # Metadata partition size should be 16mb
   metadata_partsize=$((16 * 1024 / 4))
 	if [ "$layout" == "a/b/c" ]; then
-		# Calculate size for 32 or 64gb partition with 4k logical sector size (32 if 128gb device, 64 if 256gb)
-		[ $(sgdisk --print /dev/block/sda | grep -im 1 userdata | awk '{printf "%d", $4}') -ge 128 ] && userdata_newpartsize=$((64 * 1024 * 1024 / 4)) || userdata_newpartsize=$((32 * 1024 * 1024 / 4))
+		# Calculate size for $size partition with 4k logical sector size
+    userdata_newpartsize=$((size * 1024 * 1024 / 4))
     userdata_a_partend=`echo $((userdata_partstart+userdata_newpartsize))`
 
     metadata_b_partstart=`echo $((userdata_a_partend+1))`
@@ -117,13 +159,12 @@ slot_userdata() {
   blockdev --rereadpt /dev/block/sda
 	sleep 0.5
 	ui_print "  Formatting new userdata and metadata partitions"
-	change_part format $userdata_partnum
-	change_part format $metadata_partnum
-	change_part format $userdata_b_partnum
-	change_part format $metadata_b_partnum
-  [ "$layout" == "a/b/c" ] && change_part format $userdata_c_partnum
+	change_part format $userdata_partnum $typea
+	change_part format $metadata_partnum ext4
+	change_part format $userdata_b_partnum $typeb
+	change_part format $metadata_b_partnum ext4
+  [ "$layout" == "a/b/c" ] && change_part format $userdata_c_partnum $typec
   ui_print "  Userdata has been partitioned to $layout"
-
 }
 
 repartition_userdata() {
@@ -147,8 +188,8 @@ repartition_userdata() {
       blockdev --rereadpt /dev/block/sda
       sleep 0.5
       ui_print "  Formatting userdata and metadata"
-      change_part format $userdata_partnum
-      change_part format $metadata_partnum
+      change_part format $userdata_partnum $typea
+      change_part format $metadata_partnum ext4
       ui_print "  Userdata has been repartitioned back to stock"
       ;;
     *)
@@ -157,25 +198,6 @@ repartition_userdata() {
       slot_userdata
       ;;
   esac
-  e2fsdroid -e -S /file_contexts -a /data /dev/block/sda$userdata_partnum
-  e2fsdroid -e -S /file_contexts -a /metadata /dev/block/sda$metadata_partnum
-}
-
-format_userdata() {
-  ui_print " "
-  ui_print "- Formatting userdata and metadata"
-  case $layout in 
-    "stock") local userdata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'userdata$' | awk '{ print $1 }') metadata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'metadata$' | awk '{ print $1 }');;
-    *) local userdata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'userdata_a$' | awk '{ print $1 }') metadata_partnum=$(sgdisk --print /dev/block/sda | grep -i 'metadata_a$' | awk '{ print $1 }');;
-  esac
-  for i in userdata metadata userdata_a metadata_a userdata_b metadata_b userdata2; do
-    local partnum=$(sgdisk --print /dev/block/sda | grep -i "$i$" | awk '{ print $1 }')
-    [ "$partnum" ] || continue
-    change_part format $partnum
-  done
-  e2fsdroid -e -S /file_contexts -a /data /dev/block/sda$userdata_partnum
-  e2fsdroid -e -S /file_contexts -a /metadata /dev/block/sda$metadata_partnum
-  ui_print "  Userdata and metadata have been formatted"
 }
 
 reset_slot() {
@@ -222,7 +244,7 @@ patch_fstabs() {
     if [ "$layout" != "stock" ]; then
       if [ "$layout" == "a/b/c" ]; then
         for j in ext4 f2fs; do
-          local k="$(sed -n "\|^/dev/block/bootdevice/by-name/userdata */data *$j|p" $i | sed -e "s|userdata|userdata2|" -e "s|/data|/datacommon|")"
+          local k="$(sed -n "\|^/dev/block/bootdevice/by-name/userdata */data *$sizes|p" $i | sed -e "s|userdata|userdata2|" -e "s|/data|/datacommon|")"
           [ "$(eval echo \$k)" ] && echo "$(eval echo \$k | sed 's/fileencryption=.*metadata_encryption,//')" >> $i
         done
       fi

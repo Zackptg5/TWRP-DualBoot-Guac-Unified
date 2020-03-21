@@ -11,9 +11,9 @@ OUTFD=/proc/self/fd/$2
 ZIPFILE="$3"
 tmp=/dev/tmp/twrp-install
 target=/dev/block/bootdevice/by-name/boot
-format=false
 magiskdata=false
 mountdata=true
+format=true
 KEEPVERITY=false
 RECOVERYMODE=false
 PERSISTDIR=/persist
@@ -59,11 +59,16 @@ supported=false
 ui_print "- Checking device compatibility"
 for i in OnePlus7Pro guacamole OnePlus7 guacamoleb OnePlus7ProTMO guacamolet OP7ProNRSpr guacamoles; do
   for prop in "ro.product.device" "ro.build.product" "ro.product.vendor.device" "ro.vendor.product.device" "ro.omni.device"; do
-    [ "$(getprop $prop)" == "$i" ] && { ui_print "  Supported Device Detected!"; supported=true; break 2; }
+    if [ "$(getprop $prop)" == "$i" ]; then
+      ui_print "  Supported Device Detected!"
+      supported=true
+      [ $(sgdisk --print /dev/block/sda | head -n1 | awk '{printf "%d", $5}') -ge 128 ] && totsize=256 || totsize=128
+      ui_print "  $totsize gb device detected!"
+      break 2
+    fi
   done
 done
 $supported || abort "  Unsupported device! Aborting!"
-ui_print " "
 
 # Setup tools
 export tools=$tmp/tools
@@ -76,43 +81,56 @@ busybox --install -s .
 cd $tmp
 
 # Get current layout
-if [ "$(sgdisk --print /dev/block/sda | grep -i userdata2)" ]; then
-  curlayout="a/b/c"
-elif [ "$(sgdisk --print /dev/block/sda | grep -i userdata_a)" ]; then
-  curlayout="a/b"
+if [ "$(sgdisk --print /dev/block/sda | grep -i userdata_a)" ]; then
+  if [ "$(sgdisk --print /dev/block/sda | grep -i userdata2)" ]; then
+    curlayout="a/b/c"
+    typec="$(blkid /dev/block/sda$(sgdisk --print /dev/block/sda | grep -i userdata2 | awk '{print $1}') | awk '{gsub("TYPE=|\"","",$3); print $3}')"
+  else
+    curlayout="a/b"
+  fi
+  cursize=$(sgdisk --print /dev/block/sda | grep -i userdata_a | awk '{printf "%d", $4}')
+  typea="$(blkid /dev/block/sda$(sgdisk --print /dev/block/sda | grep -i userdata_a | awk '{print $1}') | awk '{gsub("TYPE=|\"","",$3); print $3}')"
+  typeb="$(blkid /dev/block/sda$(sgdisk --print /dev/block/sda | grep -i userdata_b | awk '{print $1}') | awk '{gsub("TYPE=|\"","",$3); print $3}')"
 else
   curlayout="stock"
+  cursize=$(sgdisk --print /dev/block/sda | grep -i userdata | awk '{printf "%d", $4}')
+  typea="$(blkid /dev/block/sda$(sgdisk --print /dev/block/sda | grep -i userdata | awk '{print $1}') | awk '{gsub("TYPE=|\"","",$3); print $3}')"
+  typeb="$typea"
 fi
+size=$cursize
 
 # Script can't format actively decrypted userdata
 if mount | grep '/dev/block/dm-0'; then
+  ui_print " "
   ui_print "  Mounted userdata is currently encrypted!"
   ui_print "  This script is unable to format it"
-  ui_print "  If you want to repartition/format,"
+  ui_print " "
+  ui_print "  If you want to repartition/change size/format,"
   ui_print "  format data in TWRP gui, then run this zip"
   ui_print " "
-  ui_print "  If you don't want to change anything, continue"
+  ui_print "  Otherwise, continue"
   ui_print " "
   sleep 3
   ui_print "- Continue?"
   ui_print "  Vol+ yes, Vol- no"
-  chooseport && { mountdata=false; layout=$curlayout; } || exit 0
+  chooseport && { mountdata=false; format=false; layout=$curlayout; } || exit 0
 fi
 
-ui_print "- Current layout is: $curlayout"
+ui_print " "
+ui_print "- Current layout: $curlayout, userdata size: $cursize gb"
 # Set new layout
-if [ ! "$layout" ]; then
+if [ -z "$layout" ]; then
   ui_print "  Keep current layout?"
   ui_print "  Vol+ yes, Vol- no"
   if chooseport; then
     layout="$curlayout"
+    format=false
     if [ "$layout" == "a/b/c" ]; then
       ui_print " "
       ui_print "  Remember that magisk is required for a/b/c"
       ui_print "  and will be auto-selected for install"
     fi
   else
-    format=true
     ui_print " "
     ui_print "- Switch to a/b/(c) userdata or stock?"
     ui_print "  Vol+ a/b/(c), Vol- stock"
@@ -123,10 +141,11 @@ if [ ! "$layout" ]; then
       ui_print "  Magisk is required for a/b/c"
       ui_print "  Vol+ a/b/c, Vol- a/b only"
       chooseport && layout="a/b/c" || layout="a/b"
+      [ "$layout" == "a/b/c" ] && select_size
     else
       layout="stock"
     fi
-    [ "$layout" == "$curlayout" ] && format=false
+    select_format
   fi
 fi
 # Set other args
@@ -158,13 +177,21 @@ if $magisk && ! $mountdata; then
   ui_print "  And it'll prompt you to install the rest"
   sleep 3
 fi
+
 ui_print " "
 ui_print "- Selected Options"
+[ "$layout" != "$curlayout" ] && ui_print "  Layout: $curlayout -> $layout" || ui_print "  Layout: $curlayout"
+[ $cursize != $size ] && ui_print "  Userdata Size: $cursize -> $size gb" || ui_print "  Userdata Size: $size gb"
 if $format; then
-  ui_print "  Layout: $curlayout -> $layout"
   ui_print "  Format Data: Yes"
+  if [ "$layout" == "stock" ]; then
+    ui_print "  Userdata: $typea"
+  else
+    ui_print "  Userdata_a: $typea"
+    ui_print "  Userdata_b: $typeb"
+    [ "$layout" == "a/b/c" ] && ui_print "  Common Data: $typec"
+  fi
 else
-  ui_print "  Layout: $curlayout"
   ui_print "  Format Data: No"
 fi
 $KEEPFORCEENCRYPT && ui_print "  Forced Encryption: Enabled/Not Changed" || ui_print "  Forced Encryption: Disabled"
@@ -173,7 +200,7 @@ $magisk && ui_print "  Root: Magisk" || ui_print "  Root: None"
 sleep 1
 ui_print " "
 ui_print "- Last Chance - Are you sure?"
-$format && { ui_print "  All data including internal storage will be wiped"; sleep 1; }
+[ "$layout" != "$curlayout" ] && { ui_print "  All data including internal storage will be wiped"; sleep 1; }
 ui_print "  Vol+ yes, Vol- no (exit installer)"
 chooseport && ui_print " " || { ui_print " "; ui_print "Exiting installer!"; exit 0; }
 ui_print "- Beginning install"
@@ -187,7 +214,7 @@ if [ "$layout" != "stock" ]; then
   magiskboot cpio ramdisk-recovery.cpio "add 0644 etc/recovery.wipe recovery.wipe"
   magiskboot cpio ramdisk-recovery.cpio "extract etc/twrp.fstab twrp.fstab"
   sed -ri -e 's|(/userdata.*flags=)|\1slotselect;|' -e 's|(.*name/metadata) *|\1\t\t\t\t\tflags=slotselect;backup=0;display="Metadata"|' twrp.fstab
-  [ "$layout" == "a/b/c" ] && { sed -i '\|/data|a/datacommon\t\text4\t/dev/block/bootdevice/by-name/userdata2\t\t\t\t\tflags=display="Common Storage";wipeingui;storage' twrp.fstab; magiskboot cpio ramdisk-recovery.cpio "mkdir 0771 datacommon"; }
+  [ "$layout" == "a/b/c" ] && { sed -i "\|^/data|a/datacommon\t\t$typec\t/dev/block/bootdevice/by-name/userdata2\t\t\t\t\tflags=display=\"Common Storage\";wipeingui;storage" twrp.fstab; magiskboot cpio ramdisk-recovery.cpio "mkdir 0771 datacommon"; }
   magiskboot cpio ramdisk-recovery.cpio "add 0644 etc/twrp.fstab twrp.fstab"
 fi
 # Add missing useful binaries
@@ -197,11 +224,7 @@ done
 
 # Reparition and/or format userdata and metadata if applicable
 unmountAllAndRefreshPartitions
-if [ "$layout" != "$curlayout" ]; then
-  repartition_userdata
-elif $format; then
-  format_userdata
-fi
+$format && repartition_userdata
 blockdev --rereadpt /dev/block/sda
 sleep 0.2
 sync
@@ -222,6 +245,12 @@ for slot_select in active inactive; do
 
   # Install twrp
   cp -f $tmp/ramdisk-recovery.cpio ramdisk.cpio
+  if [ "$(eval echo "\$type$(echo $slot | cut -d _ -f2)")" == "f2fs" ]; then
+    cp -f $tmp/twrp.fstab twrp.fstab
+    sed -ri "s|(^/data\t* *)ext4|\1f2fs|" twrp.fstab
+    magiskboot cpio ramdisk.cpio "add 0644 etc/twrp.fstab twrp.fstab"
+    rm -f twrp.fstab
+  fi
 
   # Possibly using 2SI, export env var
   magiskboot cpio ramdisk.cpio test
