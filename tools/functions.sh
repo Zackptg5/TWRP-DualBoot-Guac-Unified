@@ -244,7 +244,7 @@ patch_fstabs() {
     if [ "$layout" != "stock" ]; then
       if [ "$layout" == "a/b/c" ]; then
         for j in ext4 f2fs; do
-          local k="$(sed -n "\|^/dev/block/bootdevice/by-name/userdata */data *$sizes|p" $i | sed -e "s|userdata|userdata2|" -e "s|/data|/datacommon|")"
+          local k="$(sed -n "\|^/dev/block/bootdevice/by-name/userdata */data *$j|p" $i | sed -e "s|userdata|userdata2|" -e "s|/data|/datacommon|")"
           [ "$(eval echo \$k)" ] && echo "$(eval echo \$k | sed 's/fileencryption=.*metadata_encryption,//')" >> $i
         done
       fi
