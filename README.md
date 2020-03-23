@@ -44,8 +44,8 @@ Either don't use a password on one slot, or leave one slot (I'll use 'a' in this
 
 ## Flashing Instructions
 * You MUST be booted into TWRP already when flashing this zip ([you can grab a bootable twrp image from here](https://forum.xda-developers.com/oneplus-7/oneplus-7--7-pro-cross-device-development/recovery-unofficial-twrp-recovery-t3932943))
-* Since this modifies data - the zip CANNOT be on sdcard or data at all
-  * If you flash from data, the zip will copy itself to /tmp and instruct you to flash it from there
+* Since this modifies data - the zip CANNOT be on sdcard or data at all UNLESS you do not want to repartition/format
+  * If you flash from data, the zip will copy itself to /tmp and instruct you to flash it from there OR you can just install twrp/magisk/disver-fec
   * You could do the above or copy it to a place like /dev or /tmp and flash it from there
   * Alternatively, you can adb sideload it
 * Read through ALL the prompts - there's lots of options :)
@@ -105,6 +105,10 @@ Take note of the **number** (I'll call *userdata_num* for the sake of this tutor
 * Run `sgdisk /dev/block/sda --print` again to make sure everything is correct and then reboot back into twrp
 
 ## Changelog
+* 03/23/2020 - 3.3.1-79 v3
+  * Put back needed binaries - mke2fs in busybox isn't sufficient - fixes errors some users were having
+  * Allow flashing zip from data if not repartitioning/formatting
+
 * 03/20/2020 - 3.3.1-79 v2
   * Changed datacommon mounting script to be more granular - user chooses what folders are mounted directly over internal storage
   * Added f2fs format option - can choose format type for each slot

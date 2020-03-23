@@ -31,11 +31,6 @@ ps | grep zygote | grep -v grep >/dev/null && BOOTMODE=true || BOOTMODE=false
 $BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -v grep >/dev/null && BOOTMODE=true
 $BOOTMODE && abort "! Flash in TWRP - use img by mauronofrio if first install!"
 
-case $ZIPFILE in
-  "/sideload/package.zip"|"/tmp/"*|"/dev/"*) ;;
-  *) cp -f "$ZIPFILE" "/tmp/$(basename "$ZIPFILE")"; ui_print " "; ui_print "! Zip can't be flashed from $(dirname "$ZIPFILE")"; abort "! Copied to /tmp - flash from there";;
-esac
-
 ui_print "###########################################"
 ui_print "#         TWRP + Magisk Installer         #"
 ui_print "#          with a/b userdata for          #"
@@ -98,6 +93,34 @@ else
   typeb="$typea"
 fi
 size=$cursize
+
+# Repartitioning can't happen if zip is in affected partition
+case $ZIPFILE in
+  "/sideload/package.zip"|"/tmp/"*|"/dev/"*) ;;
+  *) 
+    ui_print " "
+    ui_print "  Zip can't be flashed from $(dirname "$ZIPFILE")"
+    ui_print "  due to repartitioning"
+    ui_print " "
+    ui_print "  If you don't want to repartition/format, continue"
+    ui_print "  Otherwise, the zip will copy itself to /tmp"
+    ui_print "  and you can flash it from there"
+    ui_print " "
+    sleep 3
+    ui_print "- Continue?"
+    ui_print "  Vol+ yes, Vol- no"
+    if chooseport; then
+      mountdata=false
+      format=false
+      layout=$curlayout
+    else  
+      cp -f "$ZIPFILE" "/tmp/$(basename "$ZIPFILE")"
+      ui_print " "
+      ui_print "! Zip has been copied to /tmp - flash from there"
+      exit 0
+    fi
+    ;;
+esac
 
 # Script can't format actively decrypted userdata
 if mount | grep '/dev/block/dm-0'; then
