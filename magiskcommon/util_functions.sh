@@ -1,12 +1,12 @@
-#########################################
+############################################
 #
 # Magisk General Utility Functions
 # by topjohnwu
 #
-#########################################
+############################################
 
-MAGISK_VER="20.3"
-MAGISK_VER_CODE=20300
+MAGISK_VER="20.4"
+MAGISK_VER_CODE=20400
 
 ###################
 # Helper Functions
@@ -48,6 +48,8 @@ is_mounted() {
 abort() {
   ui_print "$1"
   $BOOTMODE || recovery_cleanup
+  [ -n $MODPATH ] && rm -rf $MODPATH
+  rm -rf $TMPDIR
   exit 1
 }
 
@@ -57,20 +59,27 @@ resolve_vars() {
   SERVICED=$NVBASE/service.d
 }
 
+print_title() {
+  local len=$(echo -n $1 | wc -c)
+  len=$((len + 2))
+  local pounds=$(printf "%${len}s" | tr ' ' '*')
+  ui_print "$pounds"
+  ui_print " $1 "
+  ui_print "$pounds"
+}
+
 ######################
 # Environment Related
 ######################
 
 setup_flashable() {
-  # Preserve environment varibles
-  OLD_PATH=$PATH
   ensure_bb
   $BOOTMODE && return
   if [ -z $OUTFD ] || readlink /proc/$$/fd/$OUTFD | grep -q /tmp; then
     # We will have to manually find out OUTFD
     for FD in `ls /proc/$$/fd`; do
       if readlink /proc/$$/fd/$FD | grep -q pipe; then
-        if ps | grep -v grep | grep -q " 3 $FD "; then
+        if ps | grep -v grep | grep -qE " 3 $FD |status_fd=$FD"; then
           OUTFD=$FD
           break
         fi
@@ -80,22 +89,44 @@ setup_flashable() {
 }
 
 ensure_bb() {
-  if [ -x $MAGISKTMP/busybox/busybox ]; then
-    [ -z $BBDIR ] && BBDIR=$MAGISKTMP/busybox
-  elif [ -x $TMPDIR/bin/busybox ]; then
-    [ -z $BBDIR ] && BBDIR=$TMPDIR/bin
-  else
-    # Construct the PATH
-    [ -z $BBDIR ] && BBDIR=$TMPDIR/bin
-    mkdir -p $BBDIR
-    ln -s $MAGISKBIN/busybox $BBDIR/busybox
-    $MAGISKBIN/busybox --install -s $BBDIR
+  if set -o | grep -q standalone; then
+    # We are definitely in busybox ash
+    set -o standalone
+    return
   fi
-  echo $PATH | grep -q "^$BBDIR" || export PATH=$BBDIR:$PATH
+
+  # Find our busybox binary
+  local bb
+  if [ -f $TMPDIR/busybox ]; then
+    bb=$TMPDIR/busybox
+  elif [ -f $MAGISKBIN/busybox ]; then
+    bb=$MAGISKBIN/busybox
+  else
+    abort "! Cannot find BusyBox"
+  fi
+  chmod 755 $bb
+
+  # Find our current arguments
+  # Run in busybox environment to ensure consistent results
+  # /proc/<pid>/cmdline shall be <interpreter> <script> <arguments...>
+  local cmds=$($bb sh -o standalone -c "
+  for arg in \$(tr '\0' '\n' < /proc/$$/cmdline); do
+    if [ -z \"\$cmds\" ]; then
+      # Skip the first argument as we want to change the interpreter
+      cmds=\"sh -o standalone\"
+    else
+      cmds=\"\$cmds '\$arg'\"
+    fi
+  done
+  echo \$cmds")
+
+  # Re-exec our script
+  echo $cmds | $bb xargs $bb
+  exit
 }
 
 recovery_actions() {
-  # Make sure random don't get blocked
+  # Make sure random won't get blocked
   mount -o bind /dev/urandom /dev/random
   # Unset library paths
   OLD_LD_LIB=$LD_LIBRARY_PATH
@@ -104,18 +135,25 @@ recovery_actions() {
   unset LD_LIBRARY_PATH
   unset LD_PRELOAD
   unset LD_CONFIG_FILE
-  # Force our own busybox path to be in the front
-  # and do not use anything in recovery's sbin
-  export PATH=$BBDIR:/system/bin:/vendor/bin
 }
 
 recovery_cleanup() {
+  local DIR
   ui_print "- Unmounting partitions"
-  umount -l /system 2>/dev/null
-  umount -l /system_root 2>/dev/null
-  umount -l /vendor 2>/dev/null
-  umount -l /dev/random 2>/dev/null
-  export PATH=$OLD_PATH
+  (umount_apex
+  if [ ! -d /postinstall/tmp ]; then
+    umount -l /system
+    umount -l /system_root
+  fi
+  umount -l /vendor
+  umount -l /persist
+  for DIR in /apex /system /system_root; do
+    if [ -L "${DIR}_link" ]; then
+      rmdir $DIR
+      mv -f ${DIR}_link $DIR
+    fi
+  done
+  umount -l /dev/random) 2>/dev/null
   [ -z $OLD_LD_LIB ] || export LD_LIBRARY_PATH=$OLD_LD_LIB
   [ -z $OLD_LD_PRE ] || export LD_PRELOAD=$OLD_LD_PRE
   [ -z $OLD_LD_CFG ] || export LD_CONFIG_FILE=$OLD_LD_CFG
@@ -125,6 +163,7 @@ recovery_cleanup() {
 # Installation Related
 #######################
 
+# find_block [partname...]
 find_block() {
   for BLOCK in "$@"; do
     DEVICE=`find /dev/block -type l -iname $BLOCK | head -n 1` 2>/dev/null
@@ -147,13 +186,22 @@ find_block() {
   return 1
 }
 
-# mount_name <partname> <mountpoint> <flag>
+# setup_mntpoint <mountpoint>
+setup_mntpoint() {
+  local POINT=$1
+  [ -L $POINT ] && mv -f $POINT ${POINT}_link
+  if [ ! -d $POINT ]; then
+    rm -f $POINT
+    mkdir -p $POINT
+  fi
+}
+
+# mount_name <partname(s)> <mountpoint> <flag>
 mount_name() {
   local PART=$1
   local POINT=$2
   local FLAG=$3
-  [ -L $POINT ] && rm -f $POINT
-  mkdir -p $POINT 2>/dev/null
+  setup_mntpoint $POINT
   is_mounted $POINT && return
   ui_print "- Mounting $POINT"
   # First try mounting with fstab
@@ -164,12 +212,13 @@ mount_name() {
   fi
 }
 
+# mount_ro_ensure <partname(s)> <mountpoint>
 mount_ro_ensure() {
   # We handle ro partitions only in recovery
   $BOOTMODE && return
-  local PART=$1$SLOT
-  local POINT=/$1
-  mount_name $PART $POINT '-o ro'
+  local PART=$1
+  local POINT=$2
+  mount_name "$PART" $POINT '-o ro'
   is_mounted $POINT || abort "! Cannot mount $POINT"
 }
 
@@ -183,19 +232,25 @@ mount_partitions() {
   [ -z $SLOT ] || ui_print "- Current boot slot: $SLOT"
 
   # Mount ro partitions
-  mount_ro_ensure system
+  mount_ro_ensure "system$SLOT app$SLOT" /system
   if [ -f /system/init.rc ]; then
     SYSTEM_ROOT=true
-    [ -L /system_root ] && rm -f /system_root
-    mkdir /system_root 2>/dev/null
-    mount --move /system /system_root
+    setup_mntpoint /system_root
+    if ! mount --move /system /system_root; then
+      umount /system
+      umount -l /system 2>/dev/null
+      mount_ro_ensure "system$SLOT app$SLOT" /system_root
+    fi
     mount -o bind /system_root/system /system
   else
     grep ' / ' /proc/mounts | grep -qv 'rootfs' || grep -q ' /system_root ' /proc/mounts \
     && SYSTEM_ROOT=true || SYSTEM_ROOT=false
   fi
-  [ -L /system/vendor ] && mount_ro_ensure vendor
+  [ -L /system/vendor ] && mount_ro_ensure vendor$SLOT /vendor
   $SYSTEM_ROOT && ui_print "- Device is system-as-root"
+
+  # Allow /system/bin commands (dalvikvm) on Android 10+ in recovery
+  $BOOTMODE || mount_apex
 
   # Mount persist partition in recovery
   if ! $BOOTMODE && [ ! -z $PERSISTDIR ]; then
@@ -204,10 +259,80 @@ mount_partitions() {
     mount_name persist /persist
     if ! is_mounted /persist; then
       # Fallback to cache
-      mount_name cache /cache
+      mount_name "cache cac" /cache
       is_mounted /cache && PERSISTDIR=/cache || PERSISTDIR=
     fi
   fi
+}
+
+# loop_setup <ext4_img>, sets LOOPDEV
+loop_setup() {
+  unset LOOPDEV
+  local LOOP
+  local MINORX=1
+  [ -e /dev/block/loop1 ] && MINORX=$(stat -Lc '%T' /dev/block/loop1)
+  local NUM=0
+  while [ $NUM -lt 64 ]; do
+    LOOP=/dev/block/loop$NUM
+    [ -e $LOOP ] || mknod $LOOP b 7 $((NUM * MINORX))
+    if losetup $LOOP "$1" 2>/dev/null; then
+      LOOPDEV=$LOOP
+      break
+    fi
+    NUM=$((NUM + 1))
+  done
+}
+
+mount_apex() {
+  $BOOTMODE || [ ! -d /system/apex ] && return
+  local APEX DEST
+  setup_mntpoint /apex
+  for APEX in /system/apex/*; do
+    DEST=/apex/$(basename $APEX .apex)
+    [ "$DEST" == /apex/com.android.runtime.release ] && DEST=/apex/com.android.runtime
+    mkdir -p $DEST 2>/dev/null
+    if [ -f $APEX ]; then
+      # APEX APKs, extract and loop mount
+      unzip -qo $APEX apex_payload.img -d /apex
+      loop_setup apex_payload.img
+      if [ ! -z $LOOPDEV ]; then
+        ui_print "- Mounting $DEST"
+        mount -t ext4 -o ro,noatime $LOOPDEV $DEST
+      fi
+      rm -f apex_payload.img
+    elif [ -d $APEX ]; then
+      # APEX folders, bind mount directory
+      ui_print "- Mounting $DEST"
+      mount -o bind $APEX $DEST
+    fi
+  done
+  export ANDROID_RUNTIME_ROOT=/apex/com.android.runtime
+  export ANDROID_TZDATA_ROOT=/apex/com.android.tzdata
+  local APEXRJPATH=/apex/com.android.runtime/javalib
+  local SYSFRAME=/system/framework
+  export BOOTCLASSPATH=\
+$APEXRJPATH/core-oj.jar:$APEXRJPATH/core-libart.jar:$APEXRJPATH/okhttp.jar:\
+$APEXRJPATH/bouncycastle.jar:$APEXRJPATH/apache-xml.jar:$SYSFRAME/framework.jar:\
+$SYSFRAME/ext.jar:$SYSFRAME/telephony-common.jar:$SYSFRAME/voip-common.jar:\
+$SYSFRAME/ims-common.jar:$SYSFRAME/android.test.base.jar:$SYSFRAME/telephony-ext.jar:\
+/apex/com.android.conscrypt/javalib/conscrypt.jar:\
+/apex/com.android.media/javalib/updatable-media.jar
+}
+
+umount_apex() {
+  [ -d /apex ] || return
+  local DEST SRC
+  for DEST in /apex/*; do
+    [ "$DEST" = '/apex/*' ] && break
+    SRC=$(grep $DEST /proc/mounts | awk '{ print $1 }')
+    umount -l $DEST
+    # Detach loop device just in case
+    losetup -d $SRC 2>/dev/null
+  done
+  rm -rf /apex
+  unset ANDROID_RUNTIME_ROOT
+  unset ANDROID_TZDATA_ROOT
+  unset BOOTCLASSPATH
 }
 
 get_flags() {
@@ -240,7 +365,7 @@ get_flags() {
 find_boot_image() {
   BOOTIMAGE=
   if $RECOVERYMODE; then
-    BOOTIMAGE=`find_block recovery_ramdisk$SLOT recovery`
+    BOOTIMAGE=`find_block recovery_ramdisk$SLOT recovery sos`
   elif [ ! -z $SLOT ]; then
     BOOTIMAGE=`find_block ramdisk$SLOT recovery_ramdisk$SLOT boot$SLOT`
   else
@@ -270,8 +395,11 @@ flash_image() {
     local blk_sz=`blockdev --getsize64 "$2"`
     [ $img_sz -gt $blk_sz ] && return 1
     eval $CMD1 | eval $CMD2 | cat - /dev/zero > "$2" 2>/dev/null
+  elif [ -c "$2" ]; then
+    flash_eraseall "$2"
+    eval $CMD1 | eval $CMD2 | nandwrite -p "$2" -
   else
-    ui_print "- Not block device, storing image"
+    ui_print "- Not block or char device, storing image"
     eval $CMD1 | eval $CMD2 > "$2" 2>/dev/null
   fi
   return 0
@@ -302,6 +430,13 @@ patch_dtb_partitions() {
 install_magisk() {
   cd $MAGISKBIN
 
+  # Dump image for MTD/NAND character device boot partitions
+  if [ -c $BOOTIMAGE ]; then
+    nanddump -f boot.img $BOOTIMAGE
+    local BOOTNAND=$BOOTIMAGE
+    BOOTIMAGE=boot.img
+  fi
+
   eval $BOOTSIGNER -verify < $BOOTIMAGE && BOOTSIGNED=true
   $BOOTSIGNED && ui_print "- Boot image is signed with AVB 1.0"
 
@@ -312,6 +447,9 @@ install_magisk() {
   . ./boot_patch.sh "$BOOTIMAGE"
 
   ui_print "- Flashing new boot image"
+
+  # Restore the original boot partition path
+  [ "$BOOTNAND" ] && BOOTIMAGE=$BOOTNAND
 
   if ! flash_image new-boot.img "$BOOTIMAGE"; then
     ui_print "- Compressing ramdisk to fit in partition"
@@ -360,7 +498,12 @@ remove_system_su() {
     /system/bin/app_process_init /system/bin/su /cache/su /system/lib/libsupol.so /system/lib64/libsupol.so \
     /system/su.d /system/etc/install-recovery.sh /system/etc/init.d/99SuperSUDaemon /cache/install-recovery.sh \
     /system/.supersu /cache/.supersu /data/.supersu \
-    /system/app/Superuser.apk /system/app/SuperSU /cache/Superuser.apk  2>/dev/null
+    /system/app/Superuser.apk /system/app/SuperSU /cache/Superuser.apk
+  elif [ -f /cache/su.img -o -f /data/su.img -o -d /data/adb/su -o -d /data/su ]; then
+    ui_print "- Removing systemless installed root"
+    umount -l /su 2>/dev/null
+    rm -rf /cache/su.img /data/su.img /data/adb/su /data/adb/suhide /data/su /cache/.supersu /data/.supersu \
+    /cache/supersu_install /data/supersu_install
   fi
 }
 
@@ -478,6 +621,110 @@ request_zip_size_check() {
 
 boot_actions() { return; }
 
+# Require ZIPFILE to be set
+is_legacy_script() {
+  unzip -l "$ZIPFILE" install.sh | grep -q install.sh
+  return $?
+}
+
+# Require OUTFD, ZIPFILE to be set
+install_module() {
+  local PERSISTDIR=/sbin/.magisk/mirror/persist
+
+  rm -rf $TMPDIR
+  mkdir -p $TMPDIR
+
+  setup_flashable
+  mount_partitions
+  api_level_arch_detect
+
+  # Setup busybox and binaries
+  $BOOTMODE && boot_actions || recovery_actions
+
+  # Extract prop file
+  unzip -o "$ZIPFILE" module.prop -d $TMPDIR >&2
+  [ ! -f $TMPDIR/module.prop ] && abort "! Unable to extract zip file!"
+
+  local MODDIRNAME
+  $BOOTMODE && MODDIRNAME=modules_update || MODDIRNAME=modules
+  local MODULEROOT=$NVBASE/$MODDIRNAME
+  MODID=`grep_prop id $TMPDIR/module.prop`
+  MODPATH=$MODULEROOT/$MODID
+  MODNAME=`grep_prop name $TMPDIR/module.prop`
+
+  # Create mod paths
+  rm -rf $MODPATH 2>/dev/null
+  mkdir -p $MODPATH
+
+  if is_legacy_script; then
+    unzip -oj "$ZIPFILE" module.prop install.sh uninstall.sh 'common/*' -d $TMPDIR >&2
+
+    # Load install script
+    . $TMPDIR/install.sh
+
+    # Callbacks
+    print_modname
+    on_install
+
+    [ -f $TMPDIR/uninstall.sh ] && cp -af $TMPDIR/uninstall.sh $MODPATH/uninstall.sh
+    $SKIPMOUNT && touch $MODPATH/skip_mount
+    $PROPFILE && cp -af $TMPDIR/system.prop $MODPATH/system.prop
+    cp -af $TMPDIR/module.prop $MODPATH/module.prop
+    $POSTFSDATA && cp -af $TMPDIR/post-fs-data.sh $MODPATH/post-fs-data.sh
+    $LATESTARTSERVICE && cp -af $TMPDIR/service.sh $MODPATH/service.sh
+
+    ui_print "- Setting permissions"
+    set_permissions
+  else
+    print_title "$MODNAME"
+    print_title "Powered by Magisk"
+
+    unzip -o "$ZIPFILE" customize.sh -d $MODPATH >&2
+
+    if ! grep -q '^SKIPUNZIP=1$' $MODPATH/customize.sh 2>/dev/null; then
+      ui_print "- Extracting module files"
+      unzip -o "$ZIPFILE" -x 'META-INF/*' -d $MODPATH >&2
+
+      # Default permissions
+      set_perm_recursive $MODPATH 0 0 0755 0644
+    fi
+
+    # Load customization script
+    [ -f $MODPATH/customize.sh ] && . $MODPATH/customize.sh
+  fi
+
+  # Handle replace folders
+  for TARGET in $REPLACE; do
+    ui_print "- Replace target: $TARGET"
+    mktouch $MODPATH$TARGET/.replace
+  done
+
+  if $BOOTMODE; then
+    # Update info for Magisk Manager
+    mktouch $NVBASE/modules/$MODID/update
+    cp -af $MODPATH/module.prop $NVBASE/modules/$MODID/module.prop
+  fi
+
+  # Copy over custom sepolicy rules
+  if [ -f $MODPATH/sepolicy.rule -a -e $PERSISTDIR ]; then
+    ui_print "- Installing custom sepolicy patch"
+    PERSISTMOD=$PERSISTDIR/magisk/$MODID
+    mkdir -p $PERSISTMOD
+    cp -af $MODPATH/sepolicy.rule $PERSISTMOD/sepolicy.rule
+  fi
+
+  # Remove stuffs that don't belong to modules
+  rm -rf \
+  $MODPATH/system/placeholder $MODPATH/customize.sh \
+  $MODPATH/README.md $MODPATH/.git* 2>/dev/null
+
+  cd /
+  $BOOTMODE || recovery_cleanup
+  rm -rf $TMPDIR
+
+  ui_print "- Done"
+}
+
 ##########
 # Presets
 ##########
@@ -489,11 +736,11 @@ boot_actions() { return; }
 
 MAGISKTMP=/sbin/.magisk
 NVBASE=/data/adb
-[ -z $TMPDIR ] && TMPDIR=/dev/tmp
+TMPDIR=/dev/tmp
 
 # Bootsigner related stuff
 BOOTSIGNERCLASS=a.a
-BOOTSIGNER="/system/bin/dalvikvm -Xnodex2oat -Xnoimage-dex2oat -cp \$APK \$BOOTSIGNERCLASS"
+BOOTSIGNER='/system/bin/dalvikvm -Xnoimage-dex2oat -cp $APK $BOOTSIGNERCLASS'
 BOOTSIGNED=false
 
 resolve_vars

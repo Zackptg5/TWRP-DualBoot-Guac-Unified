@@ -17,7 +17,7 @@ chooseport() {
 unmountAllAndRefreshPartitions() {
 	mount | grep /dev/block/ | while read -r line ; do
 		thispart=`echo "$line" | awk '{ print $3 }'`
-		umount -f $thispart
+		umount -lf $thispart
 		sleep 0.5
 	done
 	stop sbinqseecomd
@@ -53,6 +53,7 @@ select_format() {
   if [ "$layout" == "stock" ]; then
     chooseport && typea="ext4" || typea="f2fs"
   else
+    ui_print " "
     [ "$layout" == "a/b/c" ] && local slots="a b c" || local slots="a b"
     for i in $slots; do
       ui_print "  Slot $i?"
@@ -64,7 +65,6 @@ select_format() {
 change_part() {
   local action=$1 partnum=$2 parttype=$3
   [ -z "$partnum" ] && abort "Partitioning error!"
-  [ -z "$parttype" ] && parttype=ext4
   case $action in
     "delete") sgdisk /dev/block/sda --delete $partnum;;
     "new") sgdisk /dev/block/sda --new=$partnum;;
@@ -74,12 +74,12 @@ change_part() {
       [ -z "$partsize" ] && abort "Formatting error!"
       local partname="$(sgdisk --print /dev/block/sda | grep "^ *$partnum" | awk '{gsub("_.*","",$7); print $7}' 2>/dev/null)"
       [ -z "$partname" ] && abort "Formatting error!"
-      if [ "$parttype" == "ext4" ]; then
-        mke2fs -F -F -t ext4 -b 4096 /dev/block/sda$partnum $partsize
-        [ "$partname" == "metadata" ] && e2fsdroid -e -S /file_contexts -a /metadata /dev/block/sda$partnum || e2fsdroid -e -S /file_contexts -a /data /dev/block/sda$partnum
-      else
-        mkfs.f2fs -d1 -f -O encrypt -O quota -O verity -w 4096 /dev/block/sda$partnum $partsize
+      if [ "$parttype" == "f2fs" ]; then
+        mkfs.f2fs -d1 -f -O encrypt -O quota -O verity -w 4096 /dev/block/sda$partnum $partsize || abort "Formatting error!"
         [ "$partname" == "metadata" ] && sload.f2fs -t /metadata /dev/block/sda$partnum || sload.f2fs -t /data /dev/block/sda$partnum
+      else
+        mke2fs -F -F -t ext4 -b 4096 /dev/block/sda$partnum $partsize || abort "Formatting error!"
+        [ "$partname" == "metadata" ] && e2fsdroid -e -S /file_contexts -a /metadata /dev/block/sda$partnum || e2fsdroid -e -S /file_contexts -a /data /dev/block/sda$partnum
       fi
       ;;
     *) abort "Partitioning error!";;
@@ -88,28 +88,31 @@ change_part() {
 }
 
 stock_userdata() {
-  metadata_b_partline=$(sgdisk --print /dev/block/sda | grep -i metadata_b)
-	metadata_b_partnum=$(echo "$metadata_b_partline" | awk '{ print $1 }')
+  if [ "$curlayout" != "stock" ]; then
+    metadata_b_partline=$(sgdisk --print /dev/block/sda | grep -i metadata_b)
+    metadata_b_partnum=$(echo "$metadata_b_partline" | awk '{ print $1 }')
 
-	userdata_b_partline=$(sgdisk --print /dev/block/sda | grep -i userdata_b)
-	userdata_b_partnum=$(echo "$userdata_b_partline" | awk '{ print $1 }')
+    userdata_b_partline=$(sgdisk --print /dev/block/sda | grep -i userdata_b)
+    userdata_b_partnum=$(echo "$userdata_b_partline" | awk '{ print $1 }')
 
-	if [ "$curlayout" == "a/b/c" ]; then
-		userdata_c_partline=$(sgdisk --print /dev/block/sda | grep -i 'userdata2')
-		userdata_c_partnum=$(echo "$userdata_c_partline" | awk '{ print $1 }')
-		userdata_c_partend=$(echo "$userdata_c_partline" | awk '{ print $3 }')
-		change_part delete $userdata_c_partnum
-	else
-		userdata_c_partend=$(echo "$userdata_b_partline" | awk '{ print $3 }')
-	fi
+    if [ "$curlayout" == "a/b/c" ]; then
+      userdata_c_partline=$(sgdisk --print /dev/block/sda | grep -i 'userdata2')
+      userdata_c_partnum=$(echo "$userdata_c_partline" | awk '{ print $1 }')
+      userdata_c_partend=$(echo "$userdata_c_partline" | awk '{ print $3 }')
+      change_part delete $userdata_c_partnum
+    else
+      userdata_c_partend=$(echo "$userdata_b_partline" | awk '{ print $3 }')
+    fi
+
+    change_part delete $metadata_b_partnum
+    change_part delete $userdata_b_partnum
+    change_part delete $userdata_partnum
+    change_part new $userdata_partnum:$userdata_partstart:$userdata_c_partend
+    # Update this value
+    userdata_partend=$userdata_c_partend
+  fi
   change_part change-name $metadata_partnum:metadata
-  change_part delete $metadata_b_partnum
-	change_part delete $userdata_b_partnum
-	change_part delete $userdata_partnum
-	change_part new $userdata_partnum:$userdata_partstart:$userdata_c_partend 
   change_part change-name $userdata_partnum:userdata
-  # Update this value
-  userdata_partend=$userdata_c_partend
 }
 
 slot_userdata() {
@@ -181,7 +184,7 @@ repartition_userdata() {
 	userdata_partstart=$(echo "$userdata_partline" | awk '{ print $2 }')
 	userdata_partend=$(echo "$userdata_partline" | awk '{ print $3 }')
 	userdata_partname=$(echo "$userdata_partline" | awk '{ print $7 }')
-  case $layout in 
+  case $layout in
     "stock") 
       ui_print "- Repartitioning userdata back to stock"
       stock_userdata   
@@ -241,15 +244,7 @@ patch_fstabs() {
     while true; do
       [ "$(tail -n1 $i)" ] && { echo >> $i; break; } || sed -i '$d' $i
     done
-    if [ "$layout" != "stock" ]; then
-      if [ "$layout" == "a/b/c" ]; then
-        for j in ext4 f2fs; do
-          local k="$(sed -n "\|^/dev/block/bootdevice/by-name/userdata */data *$j|p" $i | sed -e "s|userdata|userdata2|" -e "s|/data|/datacommon|")"
-          [ "$(eval echo \$k)" ] && echo "$(eval echo \$k | sed 's/fileencryption=.*metadata_encryption,//')" >> $i
-        done
-      fi
-      sed -ri "/name\/userdata |name\/metadata / s/wait,/wait,slotselect,/" $i
-		fi
+    [ "$layout" == "stock" ] || sed -ri "/name\/userdata |name\/metadata / s/wait,/wait,slotselect,/" $i
 		chcon $perm $i
 	done
 }

@@ -49,6 +49,16 @@ mkdir -p $tmp
 unzip -o "$ZIPFILE" -d $tmp || abort "Failed to extract zip!"
 sleep 1
 
+# Setup tools
+export tools=$tmp/tools
+cd $tools
+cp -af magiskinit magiskpolicy
+chmod -R 0755 $tools
+export PATH=$tools:$PATH
+busybox --install -s .
+. functions.sh
+cd $tmp
+
 # Device check
 supported=false
 ui_print "- Checking device compatibility"
@@ -57,7 +67,8 @@ for i in OnePlus7Pro guacamole OnePlus7 guacamoleb OnePlus7ProTMO guacamolet OP7
     if [ "$(getprop $prop)" == "$i" ]; then
       ui_print "  Supported Device Detected!"
       supported=true
-      [ $(sgdisk --print /dev/block/sda | head -n1 | awk '{printf "%d", $5}') -ge 128 ] && totsize=256 || totsize=128
+      actualsize=$(sgdisk --print /dev/block/sda | awk '/^Disk \/dev\/block\/sda/{printf "%d", $5}')
+      [ $actualsize -ge 128 ] && totsize=256 || totsize=128
       ui_print "  $totsize gb device detected!"
       break 2
     fi
@@ -65,21 +76,30 @@ for i in OnePlus7Pro guacamole OnePlus7 guacamoleb OnePlus7ProTMO guacamolet OP7
 done
 $supported || abort "  Unsupported device! Aborting!"
 
-# Setup tools
-export tools=$tmp/tools
-cd $tools
-chmod -R 0755 $tools
-export PATH=$tools:$PATH
-cp -af magiskinit magiskpolicy
-busybox --install -s .
-. functions.sh
-cd $tmp
+# Script can't format actively decrypted userdata
+if mount | grep '/dev/block/dm-0'; then
+  ui_print " "
+  ui_print "  Mounted userdata is currently encrypted!"
+  ui_print "  This script is unable to format it"
+  ui_print " "
+  ui_print "  If you want to repartition/change size/format,"
+  ui_print "  format data in TWRP gui, then run this zip"
+  ui_print " "
+  ui_print "  Otherwise, continue"
+  ui_print " "
+  sleep 3
+  ui_print "- Continue?"
+  ui_print "  Vol+ yes, Vol- no"
+  chooseport && { mountdata=false; format=false; layout=$curlayout; } || exit 0
+fi
 
 # Get current layout
+comsize=0
 if [ "$(sgdisk --print /dev/block/sda | grep -i userdata_a)" ]; then
   if [ "$(sgdisk --print /dev/block/sda | grep -i userdata2)" ]; then
     curlayout="a/b/c"
     typec="$(blkid /dev/block/sda$(sgdisk --print /dev/block/sda | grep -i userdata2 | awk '{print $1}') | awk '{gsub("TYPE=|\"","",$3); print $3}')"
+    comsize=$(sgdisk --print /dev/block/sda | grep -i userdata2 | awk '{printf "%d", $4}')
   else
     curlayout="a/b"
   fi
@@ -110,7 +130,7 @@ case $ZIPFILE in
     ui_print "- Continue?"
     ui_print "  Vol+ yes, Vol- no"
     if chooseport; then
-      mountdata=false
+      [ "$(echo "$ZIPFILE" | cut -d / -f1-2)" == "/data" ] && mountdata=false
       format=false
       layout=$curlayout
     else  
@@ -122,23 +142,6 @@ case $ZIPFILE in
     ;;
 esac
 
-# Script can't format actively decrypted userdata
-if mount | grep '/dev/block/dm-0'; then
-  ui_print " "
-  ui_print "  Mounted userdata is currently encrypted!"
-  ui_print "  This script is unable to format it"
-  ui_print " "
-  ui_print "  If you want to repartition/change size/format,"
-  ui_print "  format data in TWRP gui, then run this zip"
-  ui_print " "
-  ui_print "  Otherwise, continue"
-  ui_print " "
-  sleep 3
-  ui_print "- Continue?"
-  ui_print "  Vol+ yes, Vol- no"
-  chooseport && { mountdata=false; format=false; layout=$curlayout; } || exit 0
-fi
-
 ui_print " "
 ui_print "- Current layout: $curlayout, userdata size: $cursize gb"
 # Set new layout
@@ -148,11 +151,6 @@ if [ -z "$layout" ]; then
   if chooseport; then
     layout="$curlayout"
     format=false
-    if [ "$layout" == "a/b/c" ]; then
-      ui_print " "
-      ui_print "  Remember that magisk is required for a/b/c"
-      ui_print "  and will be auto-selected for install"
-    fi
   else
     ui_print " "
     ui_print "- Switch to a/b/(c) userdata or stock?"
@@ -161,7 +159,6 @@ if [ -z "$layout" ]; then
       ui_print " "
       ui_print "- Have a common data partition or pure a/b?"
       ui_print "  Note that common data partition is not encryptable"
-      ui_print "  Magisk is required for a/b/c"
       ui_print "  Vol+ a/b/c, Vol- a/b only"
       chooseport && layout="a/b/c" || layout="a/b"
       [ "$layout" == "a/b/c" ] && select_size
@@ -171,6 +168,7 @@ if [ -z "$layout" ]; then
     select_format
   fi
 fi
+
 # Set other args
 if [ "$layout" == "stock" ]; then
   ui_print " "
@@ -180,20 +178,40 @@ if [ "$layout" == "stock" ]; then
   ui_print "  Vol+ Do not change, Vol- Disable (Recommended)"
   chooseport && KEEPVERITY=true
 fi
+export KEEPVERITY
+
 ui_print " "
 ui_print "- Forced Encryption: Keep as is or Disable?"
-ui_print "  Vol+ Do not change, Vol- Disable"
-chooseport && KEEPFORCEENCRYPT=true || KEEPFORCEENCRYPT=false
-# Magisk is required for common data mounting in oos - even permissive selinux won't cut it - problem occurs with modification to fstab - too early in boot to debug
-if [ "$layout" == "a/b/c" ]; then
-  magisk=true
-else
+if [ "$layout" != "stock" ]; then
+  ui_print "  Be sure to read the Limitation in the Readme!"
+  ui_print "  Disabling encryption recommended for reasons listed!"
+  sleep 1
+  ui_print "  Vol+ Do not change, Vol- Disable (recommended)"
   ui_print " "
-  ui_print "- Install magisk to both slots?"
-  ui_print "  Vol+ yes, Vol- no"
-  chooseport && magisk=true || magisk=false
+  ui_print "  Slot a?"
+  chooseport && feca=true || feca=false
+  ui_print "  Slot b?"
+  chooseport && fecb=true || fecb=false
+else
+  ui_print "  Vol+ Do not change, Vol- Disable"
+  chooseport && feca=true || feca=false
+  fecb=$feca
 fi
-if $magisk && ! $mountdata; then
+
+ui_print " "
+ui_print "- Install Magisk?"
+[ "$layout" == "a/b/c" ] && { ui_print "  Note that this may be needed for common data"; ui_print "   mounting on some roms like OOS"; ui_print " "; }
+ui_print "  Vol+ yes, Vol- no"
+if [ "$layout" == "stock" ]; then
+  chooseport && magiska=true || magiska=false
+  magiskb=$magiska
+else
+  ui_print "  Slot a?"
+  chooseport && magiska=true || magiska=false
+  ui_print "  Slot b?"
+  chooseport && magiskb=true || magiskb=false
+fi
+if ($magiska || $magiskb) && ! $mountdata; then
   ui_print " "
   ui_print "  Magisk will patch boot img only"
   ui_print "  You'll need to install the apk normally"
@@ -204,22 +222,29 @@ fi
 ui_print " "
 ui_print "- Selected Options"
 [ "$layout" != "$curlayout" ] && ui_print "  Layout: $curlayout -> $layout" || ui_print "  Layout: $curlayout"
-[ $cursize != $size ] && ui_print "  Userdata Size: $cursize -> $size gb" || ui_print "  Userdata Size: $size gb"
-if $format; then
-  ui_print "  Format Data: Yes"
-  if [ "$layout" == "stock" ]; then
-    ui_print "  Userdata: $typea"
-  else
-    ui_print "  Userdata_a: $typea"
-    ui_print "  Userdata_b: $typeb"
-    [ "$layout" == "a/b/c" ] && ui_print "  Common Data: $typec"
-  fi
-else
-  ui_print "  Format Data: No"
-fi
-$KEEPFORCEENCRYPT && ui_print "  Forced Encryption: Enabled/Not Changed" || ui_print "  Forced Encryption: Disabled"
 $KEEPVERITY && ui_print "  Dm-Verity: Enabled/Not Changed" || ui_print "  Dm-Verity: Disabled"
-$magisk && ui_print "  Root: Magisk" || ui_print "  Root: None"
+if [ "$layout" == "stock" ]; then
+  $format && { ui_print "  Format Data: Yes"; ui_print "  Userdata: $typea"; } || ui_print "  Format Data: No"
+  $feca && ui_print "  Forced Encryption: Enabled/Not Changed" || ui_print "  Forced Encryption: Disabled"
+  $magiska && ui_print "  Root: Magisk" || ui_print "  Root: None"
+else
+  $format && ui_print "  Format Data: Yes" || ui_print "  Format Data: No"
+  ui_print "  Slot A:"
+  [ $cursize != $size ] && ui_print "    Userdata Size: $cursize -> $size gb" || ui_print "    Userdata Size: $size gb"
+  $format && ui_print "    Userdata: $typea"
+  $feca && ui_print "    Forced Encryption: Enabled/Not Changed" || ui_print "    Forced Encryption: Disabled"
+  $magiska && ui_print "    Root: Magisk" || ui_print "    Root: None"
+  ui_print "  Slot B:"
+  [ $cursize != $size ] && ui_print "    Userdata Size: $cursize -> $size gb" || ui_print "    Userdata Size: $size gb"
+  $format && ui_print "    Userdata: $typeb"
+  $fecb && ui_print "    Forced Encryption: Enabled/Not Changed" || ui_print "    Forced Encryption: Disabled"
+  $magiskb && ui_print "    Root: Magisk" || ui_print "    Root: None"
+  if [ "$layout" == "a/b/c" ]; then
+    ui_print "  Slot C:"
+    ui_print "    Common Data: $typec"
+    [ $cursize != $size ] && ui_print "    Common Data Size: $comsize -> $((actualsize-7-$size*2)) gb" || ui_print "    Common Data Size: $comsize gb"
+  fi
+fi
 sleep 1
 ui_print " "
 ui_print "- Last Chance - Are you sure?"
@@ -227,17 +252,19 @@ ui_print "- Last Chance - Are you sure?"
 ui_print "  Vol+ yes, Vol- no (exit installer)"
 chooseport && ui_print " " || { ui_print " "; ui_print "Exiting installer!"; exit 0; }
 ui_print "- Beginning install"
-export KEEPVERITY
-export KEEPFORCEENCRYPT
 
-# Patch TWRP if needed for slot userdata and metadata
+# Patch TWRP if needed for slot userdata and metadata, patch commondata mount script
 if [ "$layout" != "stock" ]; then
   magiskboot cpio ramdisk-recovery.cpio "extract etc/recovery.wipe recovery.wipe"
   sed -i 's|^/dev/block/bootdevice/by-name/userdata$|/dev/block/bootdevice/by-name/userdata_a\n/dev/block/bootdevice/by-name/userdata_b|' recovery.wipe
   magiskboot cpio ramdisk-recovery.cpio "add 0644 etc/recovery.wipe recovery.wipe"
   magiskboot cpio ramdisk-recovery.cpio "extract etc/twrp.fstab twrp.fstab"
   sed -ri -e 's|(/userdata.*flags=)|\1slotselect;|' -e 's|(.*name/metadata) *|\1\t\t\t\t\tflags=slotselect;backup=0;display="Metadata"|' twrp.fstab
-  [ "$layout" == "a/b/c" ] && { sed -i "\|^/data|a/datacommon\t\t$typec\t/dev/block/bootdevice/by-name/userdata2\t\t\t\t\tflags=display=\"Common Storage\";wipeingui;storage" twrp.fstab; magiskboot cpio ramdisk-recovery.cpio "mkdir 0771 datacommon"; }
+  if [ "$layout" == "a/b/c" ]; then
+    sed -i "\|^/data|a/datacommon\t\t$typec\t/dev/block/bootdevice/by-name/userdata2\t\t\t\t\tflags=display=\"Common Storage\";wipeingui;storage" twrp.fstab
+    magiskboot cpio ramdisk-recovery.cpio "mkdir 0771 datacommon"
+    [ "$typec" == "f2fs" ] && sed -i -e "s/<type>/$typec/" -e 's/<flags>/rw,noatime,nosuid,nodev,discard,fsync_mode=nobarrier/' init.mount_datacommon.sh || sed -i -e "s/<type>/$typec/" -e 's/<flags>/rw,noatime,nosuid,nodev,discard,barrier=1,noauto_da_alloc/' init.mount_datacommon.sh
+  fi
   magiskboot cpio ramdisk-recovery.cpio "add 0644 etc/twrp.fstab twrp.fstab"
 fi
 # Add missing useful binaries
@@ -266,9 +293,14 @@ for slot_select in active inactive; do
   # boot.img header cmdline remove skip_override (flar2 patch)
   sed -i "s|$(grep '^cmdline=' header | cut -d= -f2-)|$(grep '^cmdline=' header | cut -d= -f2- | sed -e 's/skip_override//' -e 's/  */ /g' -e 's/[ \t]*$//')|" header
 
+  # Set slot specific vars
+  type=$(eval echo "\$type$(echo $slot | cut -d _ -f2)")
+  magisk=$(eval echo "\$magisk$(echo $slot | cut -d _ -f2)")
+  export KEEPFORCEENCRYPT=$(eval echo "\$fec$(echo $slot | cut -d _ -f2)")
+  
   # Install twrp
   cp -f $tmp/ramdisk-recovery.cpio ramdisk.cpio
-  if [ "$(eval echo "\$type$(echo $slot | cut -d _ -f2)")" == "f2fs" ]; then
+  if [ "$type" == "f2fs" ]; then
     cp -f $tmp/twrp.fstab twrp.fstab
     sed -ri "s|(^/data\t* *)ext4|\1f2fs|" twrp.fstab
     magiskboot cpio ramdisk.cpio "add 0644 etc/twrp.fstab twrp.fstab"
@@ -281,16 +313,21 @@ for slot_select in active inactive; do
   [ $((STATUS & 8)) -ne 0 ] && export TWOSTAGEINIT=true
 
   # Mount other needed partitions
-  mount "/dev/block/bootdevice/by-name/system$slot" /system
+  $KEEPVERITY && flags="ro" || flags="rw"
+  mount -o $flags "/dev/block/bootdevice/by-name/system$slot" /system
   mount --move /system /system_root
   mount -o bind /system_root/system /system
-	mount "/dev/block/bootdevice/by-name/vendor$slot" /vendor
-  mount "/dev/block/bootdevice/by-name/odm$slot" /odm
-  mount /dev/block/bootdevice/by-name/persist /persist
+	mount -o $flags "/dev/block/bootdevice/by-name/vendor$slot" /vendor
+  mount -o $flags "/dev/block/bootdevice/by-name/odm$slot" /odm
+  mount -o rw /dev/block/bootdevice/by-name/persist /persist
 
   if [ -f /system/build.prop ]; then
+    if $mountdata; then
+      [ "$layout" == "stock" ] && mount -t $type "/dev/block/bootdevice/by-name/userdata" /data || { mount -t $type "/dev/block/bootdevice/by-name/userdata$slot" /data || mountdata=false; }
+    fi
+
     if ! $KEEPVERITY; then
-      rm -rf /system_root/datacommon /system_root/init.mount_datacommon.sh
+      rm -rf /system_root/datacommon /system_root/init.mount_datacommon.sh /system_root/init.locksettings_dualboot.sh
       [ "$(grep '# Zackptg5-DualBoot' /system_root/init.rc)" ] && sed -i -e "/# Zackptg5-DualBootMod/,/init.mount_datacommon.sh/d" -e "$d" /system_root/init.rc
       while true; do 
         [ "$(tail -n1 /system_root/init.rc)" ] && break || sed -i '$d' /system_root/init.rc
@@ -332,27 +369,32 @@ for slot_select in active inactive; do
       #   magiskpolicy --load $file --save $file $2
       # fi
 
-      ui_print "  Patching sepolicy"
-      # Needed for encryption -> "Unable to measure size of /dev/block/bootdevice/by-name/userdata_x: Permission denied"
-      $KEEPFORCEENCRYPT && magiskpolicy --load $file --save $file "allow vold * * *"
+      if [ "$layout" != "stock" ]; then
+        ui_print "  Patching sepolicy"
+        # $magisk || magiskpolicy --load $file --save $file "allow shell * * *"
+        magiskpolicy --load $file --save $file "allow shell * * *"
+        context=shell
+        # Needed for encryption -> "Unable to measure size of /dev/block/bootdevice/by-name/userdata_x: Permission denied"
+        $KEEPFORCEENCRYPT && magiskpolicy --load $file --save $file "allow vold * * *"
 
-      if [ "$layout" == "a/b/c" ]; then
-        magiskpolicy --load $file --save $file "allow init media_rw_data_file dir mounton" "allow fsck block_device blk_file { ioctl read write getattr lock append map open }"
-        $magisk || magiskpolicy --load $file --save $file "allow shell * * *"
-
-        ui_print "  Installing commondata mount script"
-        mkdir /system_root/datacommon 2>/dev/null
-        set_perm /system_root/datacommon media_rw media_rw 0771 u:object_r:media_rw_data_file:s0
-        cp -f $tmp/init.mount_datacommon.sh /system_root/init.mount_datacommon.sh
-        set_perm /system_root/init.mount_datacommon.sh 0 2000 0755 u:object_r:shell_exec:s0
-        echo -e "\n# Zackptg5-DualBootMod\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh" >> /system_root/init.rc
+        if [ "$layout" == "a/b/c" ]; then
+          ui_print "  Installing commondata mount script"
+          magiskpolicy --load $file --save $file "allow init media_rw_data_file dir mounton" #"allow fsck block_device blk_file { ioctl read write getattr lock append map open }"
+          mkdir /system_root/datacommon 2>/dev/null
+          set_perm /system_root/datacommon media_rw media_rw 0771 u:object_r:media_rw_data_file:s0
+          cp -f $tmp/init.mount_datacommon.sh /system_root/init.mount_datacommon.sh
+          set_perm /system_root/init.mount_datacommon.sh 0 2000 0755 u:object_r:shell_exec:s0
+          [ "$(grep '# Zackptg5-DualBootMod' /system_root/init.rc)" ] || echo -ne "\n# Zackptg5-DualBootMod" >> /system_root/init.rc
+          echo -e "\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh\n" >> /system_root/init.rc
+        fi
       fi
+
+      # Patch vendor fstabs
+      FSTABS="$(find /system_root /vendor/etc /odm/etc -maxdepth 1 -type f -name "fstab.qcom" | sed 's|^./|/|')"
+      [ "$FSTABS" ] && patch_fstabs
     fi
 
     # Un/Install Magisk, patch verity otherwise since we're likely modifying system
-    if $mountdata; then
-      [ "$layout" == "stock" ] && mount "/dev/block/bootdevice/by-name/userdata" /data || mount "/dev/block/bootdevice/by-name/userdata$slot" /data
-    fi
     if $magisk; then
       . magisk.sh
     else
@@ -369,10 +411,6 @@ for slot_select in active inactive; do
     binary_patches
     patch_dtb_partitions
     $magiskdata && run_migrations
-
-    # Patch vendor fstabs
-    FSTABS="$(find /system_root /vendor/etc /odm/etc -maxdepth 1 -type f -name "fstab.qcom" | sed 's|^./|/|')"
-    [ "$FSTABS" ] && ! $KEEPVERITY && patch_fstabs
   else
     ui_print " "
     ui_print "  No OS installed to this slot!"
@@ -404,7 +442,14 @@ cd /
 rm -rf /dev/tmp
 
 ui_print " "
-$magisk && ui_print "- Done installing TWRP + Magisk!" || { ui_print "- Done installing TWRP!"; ui_print " "; ui_print "*** NOTE: You are now unrooted! ***"; }
+ui_print "- Done installing TWRP"
+ui_print " "
+if [ "$layout" == "stock" ]; then
+  $magisk || ui_print "*** NOTE: You are now unrooted! ***"
+else
+  $magiska || ui_print "*** NOTE: Slot A is now unrooted! ***"
+  $magiskb || ui_print "*** NOTE: Slot B is now unrooted! ***"
+fi
 ui_print " "
 
 mount /data

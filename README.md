@@ -1,6 +1,6 @@
 # TWRP-DualBoot-Guac-Unified
 
-Modified TWRP (Mauronofrio's build) and installer script for all OP7/Pro/5G variants that re-purposes userdata for true dual booting
+Modified TWRP (Mauronofrio's build) and installer script for all OP7/Pro/5G variants that re-purposes userdata for true dual booting. You can still use this as a regular stock twrp zip - one stop shop for magisk, verity, and/or forced encryption modifications
 
 ## Disclaimer
 * I am not responsible for anything bad that happens to your device. Only experienced users should be using this mod
@@ -10,12 +10,13 @@ Make sure you have a backup and know how to reparititon your phone back to stock
 
 ## Limitation
 * If you set a password, regardless of encryption status, it'll corrupt the other slot if it's also password protected. 
+* Note that some roms set one automatically
 Either don't use a password on one slot, or leave one slot (I'll use 'a' in this example) **unencrypted** and:
   * Setup rom, password, and everything on slot a
   * Boot back into twrp, choose common data as storage, and backup userdata (if not using a/b/c layout, backup TWRP folder to your computer)
   * Setup rom, password, and everything on the other slot (b)
   * Boot back into twrp, switch back to slot a (reboot back into twrp), and restore the twrp backup
-* If you messed this up and are unencrypted - delete the /data/system/locksettings.db file
+* If you messed this up and are unencrypted - delete these files in /data/system if present: locksettings.db gatekeeper.password.key password.key gatekeeper.pattern.key pattern.key gatekeeper.gesture.key gesture.key
 * If you messed this up and are encrypted - you lost the data on that slot:
   * Unmount metadata in twrp gui
   * Format metadata with this command: `mke2fs -t ext4 -b 4096 /dev/block/sda$metadata_partnum` where *metadata_partnum* is the partition number of the current metadata partition (you can find this with `sgdisk /dev/block/sda --print`). DO NOT FORGET THE PARTITION NUMBER. If you do, you'll format all of sda which results in a brick
@@ -26,7 +27,7 @@ Either don't use a password on one slot, or leave one slot (I'll use 'a' in this
 * Option to choose between ext4 and f2fs
 * Disables verity - fstabs are modified for dual boot and so this is a must unless you choose stock layout in which case it's optional
 * Option to disable forced encryption
-* Option to install magisk - this is mandatory with a/b/c layout
+* Option to install magisk
 
 ## Common Data
 * If you choose a/b/c layout - you'll have a/b userdata, but you'll also get a 3rd userdata partition I call 'Common Data'
@@ -34,13 +35,21 @@ Either don't use a password on one slot, or leave one slot (I'll use 'a' in this
 * In TWRP, this shows up as another storage option for backup/restore and on your pc as well - your phone will have 'Common Storage' and 'Internal Storage'
 * In order to be accessible when booted, some parts of the system are modified so that the it'll be accessible WITHOUT root by the following mechanisms:
   * The common data partition is mounted to /sdcard/CommonData
+  * .nomedia file is placed in CommonData so files in it won't be picked up twice if you decide to mount over internal storage as outlined below
   * Furthermore, if your use case is like mine where my music files are in common data, you can make 'mounts.txt' file in /datacommon containing a list of every FOLDER to mount directly over top of sdcard. So for example:<br/>
   /datacommon/Music -> /sdcard/Music
-    * This of course overwrites anything there so make sure that you don't have the same folder in both datacommon and regular data
-    * Note that there are 2 exceptions to this folder mounting rule:
+    * This of course mounts over anything there (overwrites it for as long as it's mounted) so make sure that you don't have the same folder in both datacommon and regular data
+    * Note that there are 3 exceptions to this folder mounting rule:
+      * All - if this is the FIRST line, ALL folders in datacommon will be mounted
       * Android
       * lost+found
     * The reasoning should be obvious - lost+found isn't something you should need to mess with and Android is for regular data partition only - that's OS specific and should be on separate slots
+    * Note that you should have 1 folder listed on every line, for example:
+      ```DCIM
+      Music
+      Pictures
+      ViPER4AndroidFX
+      ```
 
 ## Flashing Instructions
 * You MUST be booted into TWRP already when flashing this zip ([you can grab a bootable twrp image from here](https://forum.xda-developers.com/oneplus-7/oneplus-7--7-pro-cross-device-development/recovery-unofficial-twrp-recovery-t3932943))
@@ -105,6 +114,15 @@ Take note of the **number** (I'll call *userdata_num* for the sake of this tutor
 * Run `sgdisk /dev/block/sda --print` again to make sure everything is correct and then reboot back into twrp
 
 ## Changelog
+* 03/29/2020 - 3.3.1-79 v4
+  * Add mount all option for datacommon mounts.txt
+  * Redid how commondata was mounted - fixed issues with lots of roms like AOSPA
+    * Magisk made optional for commondata - it is still needed for some roms though (like oos)
+  * Made other vars slot selectable
+  * Storage size detection fix
+  * Misc fixes/improvements
+  * Updated to magisk 20.4
+
 * 03/23/2020 - 3.3.1-79 v3
   * Put back needed binaries - mke2fs in busybox isn't sufficient - fixes errors some users were having
   * Allow flashing zip from data if not repartitioning/formatting
