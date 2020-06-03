@@ -81,7 +81,7 @@ Make sure you have a backup and know how to reparititon your phone back to stock
     * ForceEncryption disabled for both slots
 	* Magisk installed to both slots
 	
-  * add any of the following options to custimize quickmode to your liking, capitilizing the letter of the slot youd like to enable that option for: 
+  * add any of the following options to the name of the zipfile to custimize quickmode to your liking, capitilizing the letter of the slot youd like to enable that option for: 
 	* ` fec.ab ` will ENABLE force encrytion for the capitalized slot letter
 	* ` su.ab ` or ` magisk.ab ` will ENABLE the installation of magisk for the capitalized slot letter
     * Example: if the file is named ` TWRP-DualBoot-fast-fec.AB-su.aB.zip ` then:
