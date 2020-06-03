@@ -61,6 +61,7 @@ Make sure you have a backup and know how to reparititon your phone back to stock
   * Alternatively, you can adb sideload it
 * Read through ALL the prompts - there's lots of options :)
 
+
 ## How to Flash Roms
 * Nothing changes here except ONLY FLASH IN TWRP
   * Roms always flash to the opposite slot. Keep that in mind and you'll be fine
@@ -72,6 +73,24 @@ Make sure you have a backup and know how to reparititon your phone back to stock
   * Flash this zip
   * Reboot into twrp
   * Flash everything else
+  
+## Quickmode usage     NOT RESPONSIBLE FOR BUGS, BRICKS OR MISTAKES!  USE AT OWN RISK!
+* Change the zip name to enable quickmode options (Case Sensitive!)
+  * keeps current layout
+  * add the words ` fast ` or ` quick ` in the zip file to enable quickmode with the following default options:
+    * ForceEncryption disabled for both slots
+	* Magisk installed to both slots
+	
+  * add any of the following options to custimize quickmode to your liking, capitilizing the letter of the slot youd like to enable that option for: 
+	* ` fec.ab ` will ENABLE force encrytion for the capitalized slot letter
+	* ` su.ab ` or ` magisk.ab ` will ENABLE the installation of magisk for the capitalized slot letter
+    * Example: if the file is named ` TWRP-DualBoot-fast-fec.AB-su.aB.zip ` then:
+	  * ForceEncryption will be ENABLED on both slot _a and slot _b
+	  * Magisk will be installed on slot _b, but NOT installed on slot _a
+	  
+  *	 **ADVANCED USERS ONLY** NOT RESPONSIBLE FOR BUGS, BRICKS OR MISTAKES!  USE AT OWN RISK!
+	* ` confirm.y ` will skip the final confirmation before any work is done, and run the options chosen or defaults if none specified
+	* the word ` warp ` this can be used instead of ` fast ` or ` quick ` and ` confirm.y ` if you'd also like to use quickmode without confirmation 
 
 ## Help! I Can't Boot!
 * Usually this is because you switched roms without formatting data first. This should be flashing 101 but we all forget sometimes. Plus this slot stuff can get confusing

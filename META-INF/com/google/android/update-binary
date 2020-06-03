@@ -114,9 +114,39 @@ else
 fi
 size=$cursize
 
+#check for and gather quickmode options 
+ZIPOPT="$(echo $(basename $ZIPFILE))"
+NOCONFIRM=false
+while true; do
+  case $ZIPOPT in
+	*fec.Ab*) KEEPFORCEENCA=true; KEEPFORCEENCB=false; ZIPOPT=$(echo $ZIPOPT | sed -r "s/fec.Ab//g");;
+	*fec.aB*) KEEPFORCEENCA=false; KEEPFORCEENCB=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/fec.aB//g");;
+	*fec.AB*) KEEPFORCEENCA=true; KEEPFORCEENCB=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/fec.AB//g");;
+	*fec.ab*) KEEPFORCEENCA=false; KEEPFORCEENCB=false; ZIPOPT=$(echo $ZIPOPT | sed -r "s/fec.ab//g");;
+	*su.Ab*|*magisk.Ab*) INSTALLMAGISKA=true; INSTALLMAGISKB=false; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(su.Ab|magisk.Ab)//g");;
+	*su.B*|*magisk.aB*) INSTALLMAGISKA=false; INSTALLMAGISKB=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(su.aB|magisk.aB)//g");;
+	*su.AB*|*magisk.AB*) INSTALLMAGISKA=true; INSTALLMAGISKB=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(su.AB|magisk.AB)//g");;
+	*su.ab*|*magisk.ab*) INSTALLMAGISKA=false; INSTALLMAGISKB=false; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(su.ab|magisk.ab)//g");;
+	*quick*|*fast*) QUICKMODE=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(quick|fast)//g");;
+	*warp*) QUICKMODE=true; NOCONFIRM=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(quick|fast)//g");;
+	*confirm.y*) NOCONFIRM=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/confirm.y//g");;
+	*) break;;
+  esac
+done
+
 # Repartitioning can't happen if zip is in affected partition
 case $ZIPFILE in
   "/sideload/package.zip"|"/tmp/"*|"/dev/"*|"/usbstorage/"*) ;;
+  *quick*|*fast*) #redundancy so it doesnt identify a directory wit quick in the title as quickmode
+	ZIPOPT="$(echo $(basename $ZIPFILE))"
+	case $ZIPOPT in
+		*quick*|*fast*)
+			[ "$(echo "$ZIPFILE" | cut -d / -f1-2)" == "/data" ] && mountdata=false
+			format=false
+			layout=$curlayout
+			;;
+	esac
+	;;
   *) 
     ui_print " "
     ui_print "  Zip can't be flashed from $(dirname "$ZIPFILE")"
@@ -142,6 +172,34 @@ case $ZIPFILE in
     ;;
 esac
 
+if [ "$QUICKMODE" = "true" ]; then
+	ui_print " "
+	ui_print " Quicknode enabled, not asking questions... "
+	$NOCONFIRM || ui_print " Confirmation enabled... " && ui_print " Confirmation disabled... HOPE YOU KNOW WHAT YOURE DOING!"
+	[ "$(echo "$ZIPFILE" | cut -d / -f1-2)" == "/data" ] && mountdata=false
+	layout=$curlayout
+	#never format in quickmode
+	format=false
+	magiska=$INSTALLMAGISKA 
+	feca=$KEEPFORCEENCA
+	magiskb=$INSTALLMAGISKB
+	fecb=$KEEPFORCEENCB
+	#defaults
+	if [ -z "$magiska" ]; then
+		magiska=true 
+	fi
+	if [ -z "$magiskb" ]; then
+		magiskb=true
+	fi
+	if [ -z "$feca" ]; then
+		feca=false
+	fi
+	if [ -z "$fecb" ]; then
+		fecb=false
+	fi
+fi
+
+if [ "$QUICKMODE" != "true" ]; then
 ui_print " "
 ui_print "- Current layout: $curlayout, userdata size: $cursize gb"
 # Set new layout
@@ -218,6 +276,8 @@ if ($magiska || $magiskb) && ! $mountdata; then
   ui_print "  And it'll prompt you to install the rest"
   sleep 3
 fi
+	
+fi
 
 ui_print " "
 ui_print "- Selected Options"
@@ -245,12 +305,15 @@ else
     [ $cursize != $size ] && ui_print "    Common Data Size: $comsize -> $((actualsize-7-$size*2)) gb" || ui_print "    Common Data Size: $comsize gb"
   fi
 fi
+
 sleep 1
 ui_print " "
-ui_print "- Last Chance - Are you sure?"
-[ "$layout" != "$curlayout" ] && { ui_print "  All data including internal storage will be wiped"; sleep 1; }
-ui_print "  Vol+ yes, Vol- no (exit installer)"
-chooseport && ui_print " " || { ui_print " "; ui_print "Exiting installer!"; exit 0; }
+if [ "$NOCONFIRM" != "true" ]; then
+	ui_print "- Last Chance - Are you sure?"
+	[ "$layout" != "$curlayout" ] && { ui_print "  All data including internal storage will be wiped"; sleep 1; }
+	ui_print "  Vol+ yes, Vol- no (exit installer)"
+	chooseport && ui_print " " || { ui_print " "; ui_print "Exiting installer!"; exit 0; }
+fi
 ui_print "- Beginning install"
 
 # Patch TWRP if needed for slot userdata and metadata, patch commondata mount script
