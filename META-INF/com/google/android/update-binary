@@ -116,7 +116,7 @@ size=$cursize
 
 # Repartitioning can't happen if zip is in affected partition
 case $ZIPFILE in
-  "/sideload/package.zip"|"/tmp/"*|"/dev/"*) ;;
+  "/sideload/package.zip"|"/tmp/"*|"/dev/"*|"/usbstorage/"*) ;;
   *) 
     ui_print " "
     ui_print "  Zip can't be flashed from $(dirname "$ZIPFILE")"
