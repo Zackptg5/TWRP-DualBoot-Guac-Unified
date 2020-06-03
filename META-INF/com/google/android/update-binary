@@ -137,8 +137,6 @@ done
 # Repartitioning can't happen if zip is in affected partition
 case $ZIPFILE in
   "/sideload/package.zip"|"/tmp/"*|"/dev/"*|"/usbstorage/"*) ;;
-  *quick*|*fast*) #redundancy so it doesnt identify a directory wit quick in the title as quickmode
-	ZIPOPT="$(echo $(basename $ZIPFILE))"
   *) 
     ui_print " "
     ui_print "  Zip can't be flashed from $(dirname "$ZIPFILE")"
