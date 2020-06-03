@@ -128,7 +128,7 @@ while true; do
 	*su.AB*|*magisk.AB*) INSTALLMAGISKA=true; INSTALLMAGISKB=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(su.AB|magisk.AB)//g");;
 	*su.ab*|*magisk.ab*) INSTALLMAGISKA=false; INSTALLMAGISKB=false; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(su.ab|magisk.ab)//g");;
 	*quick*|*fast*) QUICKMODE=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(quick|fast)//g");;
-	*warp*) QUICKMODE=true; NOCONFIRM=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(quick|fast)//g");;
+	*warp*) QUICKMODE=true; NOCONFIRM=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/warp//g");;
 	*confirm.y*) NOCONFIRM=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/confirm.y//g");;
 	*) break;;
   esac
