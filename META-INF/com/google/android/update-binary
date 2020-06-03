@@ -139,14 +139,6 @@ case $ZIPFILE in
   "/sideload/package.zip"|"/tmp/"*|"/dev/"*|"/usbstorage/"*) ;;
   *quick*|*fast*) #redundancy so it doesnt identify a directory wit quick in the title as quickmode
 	ZIPOPT="$(echo $(basename $ZIPFILE))"
-	case $ZIPOPT in
-		*quick*|*fast*)
-			[ "$(echo "$ZIPFILE" | cut -d / -f1-2)" == "/data" ] && mountdata=false
-			format=false
-			layout=$curlayout
-			;;
-	esac
-	;;
   *) 
     ui_print " "
     ui_print "  Zip can't be flashed from $(dirname "$ZIPFILE")"
