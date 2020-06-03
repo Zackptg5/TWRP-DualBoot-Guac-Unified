@@ -137,6 +137,12 @@ done
 # Repartitioning can't happen if zip is in affected partition
 case $ZIPFILE in
   "/sideload/package.zip"|"/tmp/"*|"/dev/"*|"/usbstorage/"*) ;;
+  *quick*|*fast*|*warp*) 
+	ZIPOPT="$(echo $(basename $ZIPFILE))"
+	case $ZIPOPT in
+	*quick*|*fast*|*warp*) echo ;; #disable repartition prompt for quickmode
+	esac
+	;;
   *) 
     ui_print " "
     ui_print "  Zip can't be flashed from $(dirname "$ZIPFILE")"
