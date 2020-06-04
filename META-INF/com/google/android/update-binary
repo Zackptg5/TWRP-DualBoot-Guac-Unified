@@ -130,9 +130,28 @@ while true; do
 	*quick*|*fast*) QUICKMODE=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(quick|fast)//g");;
 	*warp*) QUICKMODE=true; NOCONFIRM=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/warp//g");;
 	*confirm.y*) NOCONFIRM=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/confirm.y//g");;
+	*failsafe*|*nofail*) FAILSAFEMODE=true; ZIPOPT=$(echo $ZIPOPT | sed -r "s/(failsafe|nofail)//g");;
+	
 	*) break;;
   esac
 done
+
+#failsafe mode, make sure reboot to same slot youre booted into already.
+##reminder1 try another bootctl binary/ twrp's current binary seems unable to determine if a slot has booted successfully or is bootable. this makes the failsafe unable to make the correct decision on whether or not to run based on environment
+##reminder2 implement decision to make failsfe not apply in sideload until resolved, still leaves "fastboot boot twrp.img" potentially unsafe, but at least youre at the computer and can fix it
+if [ "$FAILSAFEMODE" = "true" ]; then
+	ui_print " "
+	ui_print " Executing Failsafe... "
+	fscurrentslot=$(bootctl get-current-slot) 
+	bootctl set-active-boot-slot $fscurrentslot
+	fsnextbootslot=$(bootctl get-suffix $fscurrentslot)
+	ui_print " Done. you will now boot to $fsnextbootslot"
+	ui_print " ** IF YOU JUST FLASHED A ROM ** "
+	ui_print " ** TWRP will almost certainly show wrong slot now "
+	
+else
+	FAILSAFEMODE=false #set to false so status works correctly
+fi
 
 # Repartitioning can't happen if zip is in affected partition
 case $ZIPFILE in
@@ -277,12 +296,14 @@ fi
 
 ui_print " "
 ui_print "- Selected Options"
+$FAILSAFEMODE && ui_print "  Failsafe: Applied" || ui_print "  Failsafe: Not Applied"
 [ "$layout" != "$curlayout" ] && ui_print "  Layout: $curlayout -> $layout" || ui_print "  Layout: $curlayout"
 $KEEPVERITY && ui_print "  Dm-Verity: Enabled/Not Changed" || ui_print "  Dm-Verity: Disabled"
 if [ "$layout" == "stock" ]; then
   $format && { ui_print "  Format Data: Yes"; ui_print "  Userdata: $typea"; } || ui_print "  Format Data: No"
   $feca && ui_print "  Forced Encryption: Enabled/Not Changed" || ui_print "  Forced Encryption: Disabled"
   $magiska && ui_print "  Root: Magisk" || ui_print "  Root: None"
+
 else
   $format && ui_print "  Format Data: Yes" || ui_print "  Format Data: No"
   ui_print "  Slot A:"

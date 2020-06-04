@@ -30,6 +30,8 @@ Make sure you have a backup and know how to reparititon your phone back to stock
 * Disables verity - fstabs are modified for dual boot and so this is a must unless you choose stock layout in which case it's optional
 * Option to disable forced encryption
 * Option to install magisk
+* Quickmode for faster rom testing
+* Failsafe to keep from changing slots automatically when used in conjunction with rom install
 
 ## Common Data
 * If you choose a/b/c layout - you'll have a/b userdata, but you'll also get a 3rd userdata partition I call 'Common Data'
@@ -62,7 +64,7 @@ Make sure you have a backup and know how to reparititon your phone back to stock
 * Read through ALL the prompts - there's lots of options :)
 
 
-## How to Flash Roms
+## How to Flash Roms 
 * Nothing changes here except ONLY FLASH IN TWRP
   * Roms always flash to the opposite slot. Keep that in mind and you'll be fine
   * So don't take an OTA while booted - boot into twrp, switch slots, reboot into twrp, flash rom
@@ -71,7 +73,12 @@ Make sure you have a backup and know how to reparititon your phone back to stock
   * reboot into twrp selecting slot you do NOT want rom installed to
   * Flash rom
   * Flash this zip
-  * Reboot into twrp
+  * Reboot into twrp 
+	* When using failsafe mode, 
+		* TWRP will boot into the slot you were in BEFORE you flashed the rom.
+		* TWRP will almost certainly show the incorrect "current slot" at the reboot menu.
+		* The slot selection buttons still work. If youve kept track in youre head, and the zip didnt fail; pick the correct slot now
+		* or reboot to recovery, then switch into the slot which contains the new rom youve just installed
   * Flash everything else
   
 ## Quickmode usage     NOT RESPONSIBLE FOR BUGS, BRICKS OR MISTAKES!  USE AT OWN RISK!
@@ -91,6 +98,15 @@ Make sure you have a backup and know how to reparititon your phone back to stock
   *	 **ADVANCED USERS ONLY** NOT RESPONSIBLE FOR BUGS, BRICKS OR MISTAKES!  USE AT OWN RISK!
 	* ` confirm.y ` will skip the final confirmation before any work is done, and run the options chosen or defaults if none specified
 	* the word ` warp ` this can be used instead of ` fast ` or ` quick ` and ` confirm.y ` if you'd also like to use quickmode without confirmation 
+
+## Failsafe usage / explaination
+	Ive had a few instances where a rom doesnt agree with whats going on, and the dualboot zip gets stuck on a slot and never finishes. This results in forcing the phone off, and leaves the phone in a non bootable state, with an unprepared slot. Not to mention a stock, or worse, no recovery at all. Bootloop city. 
+	Enter the failsafe option: just add ` nofail ` or ` failsafe ` (case sensitive) to the zip name like above, and the zip will revert the slot change caused by the rom install and keep you able to boot back into the current slot's TWRP so you can sort out the slot youre working on. Pair this with a usb drive or commondata, and youre (relatively) safe to flash on the go, or from your bed with the computer off. 
+	
+	* Notes 
+		* After applying the failsafe, the reboot screen in TWRP will ALMOST CERTANLY show the incorrect slot until you either manually select a slot or reboot recovery. 
+		* This adds a step or two to the flashing process, make sure you've read that.
+
 
 ## Help! I Can't Boot!
 * Usually this is because you switched roms without formatting data first. This should be flashing 101 but we all forget sometimes. Plus this slot stuff can get confusing
