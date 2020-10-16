@@ -151,6 +151,10 @@ Take note of the **number** (I'll call *userdata_num* for the sake of this tutor
 * Run `sgdisk /dev/block/sda --print` again to make sure everything is correct and then reboot back into twrp
 
 ## Changelog
+* 16/10/2020 - OrangeFox TWRP
+  * Changed to OrangeFox Recovery
+  * Added check to get the right initrc (Android 11 compliant)
+
 * 03/29/2020 - 3.3.1-79 v4
   * Add mount all option for datacommon mounts.txt
   * Redid how commondata was mounted - fixed issues with lots of roms like AOSPA
