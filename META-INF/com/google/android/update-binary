@@ -367,17 +367,6 @@ sleep 0.2
 for slot_select in active inactive; do
   reset_slot
   ui_print " "
-  ui_print "- Checking Environment..."
-  if [ -f "/system/etc/init/hw/init.rc" ]; then
-    ui_print "- Android 11 found on this slot, preparing Magisk 21..."
-	cp -rf $tmp/magiskcommon_a11/* $tmp/magiskcommon/
-	cp -rf $tmp/tools_a11/* $tmp/tools/
-  else
-    ui_print "- Android 10 found on this slot, preparing Magisk 20.4..."
-	cp -rf $tmp/magiskcommon_a10/* $tmp/magiskcommon/
-	cp -rf $tmp/tools_a10/* $tmp/tools/
-  fi
-  ui_print " "
   ui_print "- Patching $slot_select slot: $slot..."
   mkdir boot
   cd boot
@@ -508,6 +497,17 @@ for slot_select in active inactive; do
 
     # Un/Install Magisk, patch verity otherwise since we're likely modifying system
     if $magisk; then
+	  ui_print " "
+      ui_print "- Checking Environment..."
+      if [ -f "/system/etc/init/hw/init.rc" ]; then
+        ui_print "- Android 11 found on this slot, preparing Magisk 21..."
+	    cp -rf $tmp/magiskcommon_a11/* $tmp/magiskcommon/
+	    cp -rf $tmp/tools_a11/* $tmp/tools/
+      else
+        ui_print "- Android 10 found on this slot, preparing Magisk 20.4..."
+	    cp -rf $tmp/magiskcommon_a10/* $tmp/magiskcommon/
+	    cp -rf $tmp/tools_a10/* $tmp/tools/
+      fi
 	  . magisk.sh
     else
       ui_print "  Patching ramdisk"
@@ -554,7 +554,7 @@ cd /
 rm -rf /dev/tmp
 
 ui_print " "
-ui_print "- Done installing TWRP"
+ui_print "- Done installing Recovery"
 ui_print " "
 if [ "$layout" == "stock" ]; then
   $magisk || ui_print "*** NOTE: You are now unrooted! ***"
