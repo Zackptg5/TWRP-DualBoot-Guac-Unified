@@ -374,8 +374,8 @@ for slot_select in active inactive; do
 	cp -rf $tmp/tools_a11/* $tmp/tools/
   else
     ui_print "- Android 10 found on this slot, preparing Magisk 20.4..."
-	cp -rf $tmp/magiskcommon_a11/* $tmp/magiskcommon/
-	cp -rf $tmp/tools_a11/* $tmp/tools/
+	cp -rf $tmp/magiskcommon_a10/* $tmp/magiskcommon/
+	cp -rf $tmp/tools_a10/* $tmp/tools/
   fi
   ui_print " "
   ui_print "- Patching $slot_select slot: $slot..."
