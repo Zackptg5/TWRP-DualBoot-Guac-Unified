@@ -1,6 +1,6 @@
 # Orangefox-DualBoot-Guac-Unified
 
-###THANKS TO:
+### THANKS TO:
 
 * Zackptg5 - The master of this mod
 * Ae3NerdGod, Neel P, Whismasterflo
