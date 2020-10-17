@@ -367,6 +367,17 @@ sleep 0.2
 for slot_select in active inactive; do
   reset_slot
   ui_print " "
+  ui_print "- Checking Environment..."
+  if [ -f "/system/etc/init/hw/init.rc" ]; then
+    ui_print "- Android 11 found on this slot, preparing Magisk 21..."
+	cp -rf $tmp/magiskcommon_a11/* $tmp/magiskcommon/
+	cp -rf $tmp/tools_a11/* $tmp/tools/
+  else
+    ui_print "- Android 10 found on this slot, preparing Magisk 20.4..."
+	cp -rf $tmp/magiskcommon_a11/* $tmp/magiskcommon/
+	cp -rf $tmp/tools_a11/* $tmp/tools/
+  fi
+  ui_print " "
   ui_print "- Patching $slot_select slot: $slot..."
   mkdir boot
   cd boot
@@ -412,14 +423,14 @@ for slot_select in active inactive; do
     
     if ! $KEEPVERITY; then
       if [ -f "/system/etc/init/hw/init.rc" ]; then
-        ui_print "- Android 11 found - using new path for init.rc"
+        ui_print "- Android 11 - using new path for init.rc"
         rm -rf /system_root/datacommon /system_root/init.mount_datacommon.sh /system_root/init.locksettings_dualboot.sh
         [ "$(grep '# Zackptg5-DualBoot' /system/etc/init/hw/init.rc)" ] && sed -i -e "/# Zackptg5-DualBootMod/,/init.mount_datacommon.sh/d" -e "$d" /system/etc/init/hw/init.rc
         while true; do 
           [ "$(tail -n1 /system/etc/init/hw/init.rc)" ] && break || sed -i '$d' /system/etc/init/hw/init.rc
         done
       else
-        ui_print "- Android 10 found - using standard path for init.rc"
+        ui_print "- Android 10 - using standard path for init.rc"
         rm -rf /system_root/datacommon /system_root/init.mount_datacommon.sh /system_root/init.locksettings_dualboot.sh
         [ "$(grep '# Zackptg5-DualBoot' /system_root/init.rc)" ] && sed -i -e "/# Zackptg5-DualBootMod/,/init.mount_datacommon.sh/d" -e "$d" /system_root/init.rc
         while true; do 
@@ -479,11 +490,11 @@ for slot_select in active inactive; do
           cp -f $tmp/init.mount_datacommon.sh /system_root/init.mount_datacommon.sh
           set_perm /system_root/init.mount_datacommon.sh 0 2000 0755 u:object_r:shell_exec:s0
           if [ -f "/system/etc/init/hw/init.rc" ]; then
-            ui_print "- Android 11 found - using new path for init.rc"
+            ui_print "- Android 11 - using new path for init.rc"
             [ "$(grep '# Zackptg5-DualBootMod' /system/etc/init/hw/init.rc)" ] || echo -ne "\n# Zackptg5-DualBootMod" >> /system/etc/init/hw/init.rc
             echo -e "\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh\n" >> /system/etc/init/hw/init.rc
           else
-            ui_print "- Android 10 found - using standard path for init.rc"
+            ui_print "- Android 10 - using standard path for init.rc"
             [ "$(grep '# Zackptg5-DualBootMod' /system_root/init.rc)" ] || echo -ne "\n# Zackptg5-DualBootMod" >> /system_root/init.rc
             echo -e "\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh\n" >> /system_root/init.rc
           fi
