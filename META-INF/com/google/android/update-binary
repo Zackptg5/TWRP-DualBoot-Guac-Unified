@@ -497,7 +497,7 @@ for slot_select in active inactive; do
 
     # Un/Install Magisk, patch verity otherwise since we're likely modifying system
     if $magisk; then
-      . magisk.sh
+	  . magisk.sh
     else
       ui_print "  Patching ramdisk"
       magiskboot cpio ramdisk.cpio patch

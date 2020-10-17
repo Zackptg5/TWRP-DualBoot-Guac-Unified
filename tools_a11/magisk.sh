@@ -1,4 +1,4 @@
-ui_print "  Installing Magisk $(grep_prop MAGISK_VER $tmp/magiskcommon_a11/util_functions.sh | sed 's/"//g')"
+ui_print "  Installing Magisk $(grep_prop MAGISK_VER $tmp/magiskcommon/util_functions.sh | sed 's/"//g')"
 MAGISKBIN=/data/adb/magisk
 $mountdata && magiskdata=true || magiskdata=false
 [ "$layout" == "stock" ] && [ "$slot_select" == "inactive" ] && magiskdata=false
@@ -7,7 +7,7 @@ $mountdata && magiskdata=true || magiskdata=false
 if $magiskdata; then
   rm -rf $MAGISKBIN/* 2>/dev/null
   mkdir -p $MAGISKBIN 2>/dev/null
-  cp -af $tools/magisk* $tmp/magiskcommon_a11/* $tools/busybox $MAGISKBIN
+  cp -af $tools/magisk* $tmp/magiskcommon/* $tools/busybox $MAGISKBIN
   chmod -R 755 $MAGISKBIN
   magiskinit -x magisk $MAGISKBIN/magisk
 fi
@@ -16,7 +16,7 @@ fi
 if [ -d /system/addon.d ]; then
   ui_print "    Adding addon.d survival script"
   ADDOND=/system/addon.d/99-magisk.sh
-  cp -f $tmp/magiskcommon_a11/addon.d.sh $ADDOND
+  cp -f $tmp/magiskcommon/addon.d.sh $ADDOND
   chmod 755 $ADDOND
 fi
 

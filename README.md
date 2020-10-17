@@ -1,4 +1,9 @@
-# TWRP-DualBoot-Guac-Unified
+# Orangefox-DualBoot-Guac-Unified
+
+THANKS TO:
+MAIN: Zackptg5 - The master of this mod
+DEV: Ae3NerdGod, Neel P, Whismasterflo
+TESTER: muphetz, Varun Soma
 
 Modified TWRP (Mauronofrio's build) and installer script for all OP7/Pro/5G variants that re-purposes userdata for true dual booting. You can still use this as a regular stock twrp zip - one stop shop for magisk, verity, and/or forced encryption modifications
 
