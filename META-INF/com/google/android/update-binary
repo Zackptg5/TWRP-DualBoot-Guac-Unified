@@ -1,6 +1,6 @@
 #!/sbin/sh
 # TWRP A/B Installer Backend
-# by Zackptg5, Osm0sis, Dees_Troy, Topjohnwu, and CosmicDan
+# by Invernomut0, Zackptg5, Osm0sis, Dees_Troy, Topjohnwu, and CosmicDan
 
 # Functions needed early
 ui_print() { $BOOTMODE && echo "$1" || echo -e "ui_print $1\nui_print" >> $OUTFD; }
