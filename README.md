@@ -96,17 +96,17 @@ Make sure you have a backup and know how to reparititon your phone back to stock
 	* Magisk installed to both slots
 	
   * add any of the following options to the name of the zipfile to custimize quickmode to your liking, capitilizing the letter of the slot youd like to enable that option for: 
- 	*For FEC
-		*A-Will keep forceencrypt (if rom forces it) for slot A
-		*a-Will disable forceencrypt (if rom forces it) for slot A
-		*B-Will keep forceencrypt (if rom forces it) for slot B
-		*b-Will disable forceencrypt (if rom forces it) for slot B
+ 	* For FEC
+		* A-Will keep forceencrypt (if rom forces it) for slot A
+		* a-Will disable forceencrypt (if rom forces it) for slot A
+		* B-Will keep forceencrypt (if rom forces it) for slot B
+		* b-Will disable forceencrypt (if rom forces it) for slot B
 	
-	*For Magisk
-		*A-Will install magisk to slot A
-		*a-Will not install magisk to slot A
-		*B-Will install mafsik to slot B
-		*b-Will not install magisk to slot B
+	* For Magisk
+		* A-Will install magisk to slot A
+		* a-Will not install magisk to slot A
+		* B-Will install mafsik to slot B
+		* b-Will not install magisk to slot B
 	
     * Example: if the file is named ` TWRP-DualBoot-fast-fec.Ab-su.aB.zip ` then:
 	  * ForceEncryption will be ENABLED on slot _a but disabled on slot _b
