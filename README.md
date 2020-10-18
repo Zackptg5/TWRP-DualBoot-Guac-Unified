@@ -4,13 +4,13 @@
 
 * Zackptg5 - The master of this mod
 * Ae3NerdGod, Neel P, Whismasterflo
-* muphetz, Varun Soma - to testing
+* muphetz, Varun Soma - for testing
 
 Modified TWRP (Mauronofrio's build) and installer script for all OP7/Pro/5G variants that re-purposes userdata for true dual booting. You can still use this as a regular stock twrp zip - one stop shop for magisk, verity, and/or forced encryption modifications
 
 ## Disclaimer
-* I am not responsible for anything bad that happens to your device. Only experienced users should be using this mod
-* This is no walk in the park mod. Although I have extensively tested it, there is always the possibility of a brick with anything that involves repartitioning. 
+* I am not responsible for anything bad that happens to your device. Only users with experience should use this mod
+* This is no walk in the park. Although I have extensively tested it, there is always a possibility of  bricking with anything that involves repartitioning. 
 Make sure you have a backup and know how to reparititon your phone back to stock (there's a guide at the end of this readme with the basics)
 * **YOU'VE BEEN WARNED - Use at your own risk**
 
@@ -90,16 +90,26 @@ Make sure you have a backup and know how to reparititon your phone back to stock
 ## Quickmode usage     NOT RESPONSIBLE FOR BUGS, BRICKS OR MISTAKES!  USE AT OWN RISK!
 * Change the zip name to enable quickmode options (Case Sensitive!)
   * keeps current layout
-  * add the words ` fast ` or ` quick ` in the zip file to enable quickmode with the following default options:
+  * add the word ` quick ` in the zip file to enable quickmode with the following default options:
     * ForceEncryption disabled for both slots
 	* Magisk installed to both slots
 	
   * add any of the following options to the name of the zipfile to custimize quickmode to your liking, capitilizing the letter of the slot youd like to enable that option for: 
-	* ` fec.ab ` will ENABLE force encrytion for the capitalized slot letter
-	* ` su.ab ` or ` magisk.ab ` will ENABLE the installation of magisk for the capitalized slot letter
-    * Example: if the file is named ` TWRP-DualBoot-fast-fec.AB-su.aB.zip ` then:
-	  * ForceEncryption will be ENABLED on both slot _a and slot _b
-	  * Magisk will be installed on slot _b, but NOT installed on slot _a
+ 	For FEC
+	A-Will keep forceencrypt (if rom forces it) for slot A
+	a-Will disable forceencrypt (if rom forces it) for slot A
+	B-Will keep forceencrypt (if rom forces it) for slot B
+	b-Will disable forceencrypt (if rom forces it) for slot B
+	
+	For Magisk
+	A-Will install magisk to slot A
+	a-Will not install magisk to slot A
+	B-Will install mafsik to slot B
+	b-Will not install magisk to slot B
+	
+    * Example: if the file is named ` TWRP-DualBoot-fast-fec.Ab-su.aB.zip ` then:
+	  * ForceEncryption will be ENABLED on slot _a but disabled on slot _b
+	  * Magisk will not be installed on slot _a, but  installed on slot _b
 	  
   *	 **ADVANCED USERS ONLY** NOT RESPONSIBLE FOR BUGS, BRICKS OR MISTAKES!  USE AT OWN RISK!
 	* ` confirm.y ` will skip the final confirmation before any work is done, and run the options chosen or defaults if none specified
