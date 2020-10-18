@@ -87,7 +87,8 @@ Make sure you have a backup and know how to reparititon your phone back to stock
 		* or reboot to recovery, then switch into the slot which contains the new rom youve just installed
   * Flash everything else
   
-## Quickmode usage     NOT RESPONSIBLE FOR BUGS, BRICKS OR MISTAKES!  USE AT OWN RISK!
+## Quickmode usage     
+## NOT RESPONSIBLE FOR BUGS, BRICKS OR MISTAKES!  USE AT OWN RISK!
 * Change the zip name to enable quickmode options (Case Sensitive!)
   * keeps current layout
   * add the word ` quick ` in the zip file to enable quickmode with the following default options:
