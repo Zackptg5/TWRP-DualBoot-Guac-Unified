@@ -31,11 +31,11 @@ ps | grep zygote | grep -v grep >/dev/null && BOOTMODE=true || BOOTMODE=false
 $BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -v grep >/dev/null && BOOTMODE=true
 $BOOTMODE && abort "! Flash in TWRP - use img by mauronofrio if first install!"
 
-ui_print "       #                             /" 
-ui_print "        #                           /"                             
+ui_print "       #                            /" 
+ui_print "        #                          /"                             
 ui_print "         #   ,########////////.   /"                            
 ui_print "        (#############//////////////)"                       
-ui_print "     #################//////////////////"                       
+ui_print "     #################/////////////////"                       
 ui_print "   #####(    )########////////(    )/////"                      
 ui_print "  ####################////////////////////"                     
 ui_print " #####################/////////////////////"                  
