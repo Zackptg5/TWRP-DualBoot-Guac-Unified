@@ -499,18 +499,14 @@ for slot_select in active inactive; do
     if $magisk; then
       ui_print "- Checking Environment..."
       if [ -f "/system/etc/init/hw/init.rc" ]; then
-        ui_print "  Android 11 - preparing Magisk 21"
-        ui_print "  * WARNING *"
-        ui_print "  * PLEASE FLASH MAGISK 21 MANUALLY *"
-        ui_print "  * IF YOU GOT FASTBOOT *"
-	      cp -rf $tmp/magiskcommon_a11/* $tmp/magiskcommon/
-	      cp -rf $tmp/tools_a11/* $tmp/tools/
+        ui_print "  * WARNING - A11 FASTBOOT BUG *"
+        ui_print "  * PLEASE FLASH MAGISK MANUALLY *"
+        ui_print "  Patching only ramdisk"
+        magiskboot cpio ramdisk.cpio patch
       else
-        ui_print "  Android 10 - preparing Magisk 20.4"
-	      cp -rf $tmp/magiskcommon_a10/* $tmp/magiskcommon/
-	      cp -rf $tmp/tools_a10/* $tmp/tools/
+        ui_print "  Android 10 - installing Magisk 20.4"
+        . magisk.sh
       fi
-	  . magisk.sh
     else
       ui_print "  Patching ramdisk"
       magiskboot cpio ramdisk.cpio patch
