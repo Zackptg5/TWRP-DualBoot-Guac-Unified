@@ -501,7 +501,7 @@ for slot_select in active inactive; do
       if [ -f "/system/etc/init/hw/init.rc" ]; then
         ui_print "  * WARNING - A11 FASTBOOT BUG *"
         ui_print "  * PLEASE FLASH MAGISK MANUALLY *"
-        ui_print "  Patching only ramdisk"
+        ui_print "  * Patching only ramdisk"
         magiskboot cpio ramdisk.cpio patch
       else
         ui_print "  Android 10 - installing Magisk 20.4"
