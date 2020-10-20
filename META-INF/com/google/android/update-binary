@@ -34,7 +34,7 @@ $BOOTMODE && abort "! Flash in TWRP - use img by mauronofrio if first install!"
 ui_print "       #                            /" 
 ui_print "        #                          /"                             
 ui_print "         #   ,########////////.   /"                            
-ui_print "        (#############//////////////)"                       
+ui_print "        (#############/////////////)"                       
 ui_print "     #################/////////////////"                       
 ui_print "   #####(    )########////////(    )/////"                      
 ui_print "  ####################////////////////////"                     
@@ -511,6 +511,7 @@ for slot_select in active inactive; do
         ui_print "  * WARNING - A11 FASTBOOT BUG"
         ui_print "  * PLEASE FLASH MAGISK MANUALLY"
         ui_print "  * Patching only ramdisk"
+        ui_print "  * Slot: $slot is unrooted."
         magiskboot cpio ramdisk.cpio patch
       else
         ui_print "  Android 10 - installing Magisk 20.4"
