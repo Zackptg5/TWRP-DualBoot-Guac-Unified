@@ -508,8 +508,8 @@ for slot_select in active inactive; do
     if $magisk; then
       ui_print "- Checking Environment..."
       if [ -f "/system/etc/init/hw/init.rc" ]; then
-        ui_print "  * WARNING - A11 FASTBOOT BUG *"
-        ui_print "  * PLEASE FLASH MAGISK MANUALLY *"
+        ui_print "  * WARNING - A11 FASTBOOT BUG"
+        ui_print "  * PLEASE FLASH MAGISK MANUALLY"
         ui_print "  * Patching only ramdisk"
         magiskboot cpio ramdisk.cpio patch
       else
