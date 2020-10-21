@@ -564,6 +564,17 @@ rm -rf /dev/tmp
 ui_print " "
 ui_print "- Done installing Recovery"
 ui_print " "
+
+#Install companion app
+set_perm_recursive  $tmp/data/app  1000  1000  0755  0644
+  preinstall_path=$(pwd)
+  cd $INSTALLER/data/app/
+  for apk in **/*.apk ; do
+      pm install "$INSTALLER/data/app/$apk"
+  done
+  cd $preinstall_path
+
+
 if [ "$layout" == "stock" ]; then
   $magisk || ui_print "*** NOTE: You are now unrooted! ***"
 else
