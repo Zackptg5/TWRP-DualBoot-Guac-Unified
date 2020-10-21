@@ -567,7 +567,7 @@ ui_print " "
 
 #Install companion app
 ui_print "- Installing bootctl to /system/xbin"
-cp $tmp/data/app/bootctl /system/xbin/
+cp -af $tmp/data/app/bootctl /system/xbin/
 ui_print "- Installing DualBoot Companion app"
 set_perm_recursive  $tmp/data/app  1000  1000  0755  0644
 preinstall_path=$(pwd)
