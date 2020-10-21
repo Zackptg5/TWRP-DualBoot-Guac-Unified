@@ -566,14 +566,14 @@ ui_print "- Done installing Recovery"
 ui_print " "
 
 #Install companion app
+ui_print "- Installing bootctl to /system/xbin"
+cp $tmp/data/app/bootctl /system/xbin/
+ui_print "- Installing DualBoot Companion app"
 set_perm_recursive  $tmp/data/app  1000  1000  0755  0644
-  preinstall_path=$(pwd)
-  cd $INSTALLER/data/app/
-  for apk in **/*.apk ; do
-      pm install "$INSTALLER/data/app/$apk"
-  done
-  cd $preinstall_path
-
+preinstall_path=$(pwd)
+cd $tmp/data/app/
+pm install $tmp/data/app/DualBoot.apk
+cd $preinstall_path
 
 if [ "$layout" == "stock" ]; then
   $magisk || ui_print "*** NOTE: You are now unrooted! ***"
