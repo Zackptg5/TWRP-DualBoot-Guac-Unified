@@ -572,7 +572,7 @@ ui_print "- Installing DualBoot Companion app"
 set_perm_recursive  $tmp/data/app  1000  1000  0755  0644
 preinstall_path=$(pwd)
 cd $tmp/data/app/
-pm install $tmp/data/app/DualBoot.apk
+pm install $tmp/data/app/app-release.apk
 cd $preinstall_path
 
 if [ "$layout" == "stock" ]; then
