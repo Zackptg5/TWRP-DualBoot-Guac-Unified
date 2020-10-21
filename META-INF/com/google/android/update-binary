@@ -545,6 +545,17 @@ for slot_select in active inactive; do
   cat new-boot.img /dev/zero > $target$slot 2>/dev/null || true
   magiskboot cleanup
   
+  #Install companion app
+  ui_print "- Installing bootctl to /system/xbin"
+  cp -af $tmp/data/app/bootctl /system/xbin/
+  ui_print "- Installing DualBoot Companion app"
+  set_perm_recursive  $tmp/data/app  1000  1000  0755  0644
+  preinstall_path=$(pwd)
+  cd $tmp/data/app/
+  cp -af $tmp/data/app/app-release.apk /data/local/tmp/
+  pm install /data/local/tmp/app-release.apk
+  cd $preinstall_path
+
   cd $tmp
   rm -rf boot
 
@@ -564,16 +575,6 @@ rm -rf /dev/tmp
 ui_print " "
 ui_print "- Done installing Recovery"
 ui_print " "
-
-#Install companion app
-ui_print "- Installing bootctl to /system/xbin"
-cp -af $tmp/data/app/bootctl /system/xbin/
-ui_print "- Installing DualBoot Companion app"
-set_perm_recursive  $tmp/data/app  1000  1000  0755  0644
-preinstall_path=$(pwd)
-cd $tmp/data/app/
-pm install $tmp/data/app/app-release.apk
-cd $preinstall_path
 
 if [ "$layout" == "stock" ]; then
   $magisk || ui_print "*** NOTE: You are now unrooted! ***"
