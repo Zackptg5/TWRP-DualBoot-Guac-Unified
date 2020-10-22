@@ -1,6 +1,5 @@
+## If you want something like this for your device, check out [this guide](https://gist.github.com/Zackptg5/564230ac47b27fc99891eb99e66fcc5b)
 ## Deprecated - I don't have a oneplus 7 series phone anymore and so won't be updating this. Feel free to fork and modify/update - just be careful with the repartitioning (This was tested for Android Q, things may be different for 11)
-
-If you want something like this for your device, check out [this guide](https://gist.github.com/Zackptg5/564230ac47b27fc99891eb99e66fcc5b)
 
 # TWRP-DualBoot-Guac-Unified
 
