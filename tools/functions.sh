@@ -238,6 +238,7 @@ patch_fstabs() {
       s/,support_scfs|support_scfs,|support_scfs\b//g
       s/,fsverity|fsverity,|fsverity\b//g
     " "$i"
+    ui_print "    $i - File encryption stage"
     $KEEPFORCEENCRYPT || sed -i "s/fileencryption=/=/g" $i
     sed -i "/data2/d" $i
 		sed -ri "/name\/userdata |name\/metadata / s/wait,slotselect/wait/" $i

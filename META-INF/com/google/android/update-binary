@@ -500,6 +500,7 @@ for slot_select in active inactive; do
       fi
 
       # Patch vendor fstabs
+      ui_print "  Patching vendor fstabs"
       FSTABS="$(find /system_root /vendor/etc /odm/etc -maxdepth 1 -type f -name "fstab.qcom" | sed 's|^./|/|')"
       [ "$FSTABS" ] && patch_fstabs
     fi
