@@ -240,14 +240,18 @@ patch_fstabs() {
     " "$i"
     ui_print "    $i - File encryption stage"
     $KEEPFORCEENCRYPT || sed -i "s/fileencryption=/=/g" $i
+    ui_print "    $i - File encryption stage (data)"
     sed -i "/data2/d" $i
+    ui_print "    $i - File encryption stage (userdata)"
 		sed -ri "/name\/userdata |name\/metadata / s/wait,slotselect/wait/" $i
+    ui_print "    $i - File encryption stage (finalizing)"
     while true; do
       [ "$(tail -n1 $i)" ] && { echo >> $i; break; } || sed -i '$d' $i
     done
     [ "$layout" == "stock" ] || sed -ri "/name\/userdata |name\/metadata / s/wait,/wait,slotselect,/" $i
 		chcon $perm $i
 	done
+  ui_print "    $i - Done"
 }
 
 #########################################
