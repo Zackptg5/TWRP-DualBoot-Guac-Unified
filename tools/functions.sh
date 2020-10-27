@@ -238,17 +238,20 @@ patch_fstabs() {
       s/,support_scfs|support_scfs,|support_scfs\b//g
       s/,fsverity|fsverity,|fsverity\b//g
     " "$i"
-    ui_print "    $i - File encryption stage"
+    ui_print "    - File encryption stage"
+    ui_print "    - KeepEnforceEncrypt: $KEEPFORCEENCRYPT"
     $KEEPFORCEENCRYPT || sed -i "s/fileencryption=/=/g" $i
-    ui_print "    $i - File encryption stage (data)"
+    ui_print "    - File encryption stage (data)"
     sed -i "/data2/d" $i
-    ui_print "    $i - File encryption stage (userdata)"
+    ui_print "    - File encryption stage (userdata)"
 		sed -ri "/name\/userdata |name\/metadata / s/wait,slotselect/wait/" $i
-    ui_print "    $i - File encryption stage (finalizing)"
+    ui_print "    - File encryption stage (finalizing)"
     while true; do
       [ "$(tail -n1 $i)" ] && { echo >> $i; break; } || sed -i '$d' $i
     done
+    ui_print "    - Checking Layout: $layout"
     [ "$layout" == "stock" ] || sed -ri "/name\/userdata |name\/metadata / s/wait,/wait,slotselect,/" $i
+    ui_print "    - Change Context to $i"
 		chcon $perm $i
 	done
   ui_print "    $i - Done"
