@@ -48,7 +48,7 @@ ui_print "#          with a/b userdata for          #"
 ui_print "#        OnePlus 7/7 Pro/7 Pro 5G         #"
 ui_print "#               by Zackptg5               #"
 ui_print "###########################################"
-ui_print "#        OrangeFox build by DahakePL      #"
+ui_print "#            OrangeFox Version            #"
 ui_print "###########################################"
 ui_print "# Note that this will also disable verity #"
 ui_print "###########################################"
@@ -550,18 +550,6 @@ for slot_select in active inactive; do
   cat new-boot.img /dev/zero > $target$slot 2>/dev/null || true
   magiskboot cleanup
   
-  #Install companion app
-
-  ui_print "- Installing bootctl to /system/xbin"
-  cp -af $tmp/data/app/bootctl /system/xbin/
-  #ui_print "- Installing DualBoot Companion app"
-  #set_perm_recursive  $tmp/data/app  1000  1000  0755  0644
-  #preinstall_path=$(pwd)
-  #cd $tmp/data/app/
-  #cp -af $tmp/data/app/app-release.apk /data/local/tmp/
-  #cd /data/local/tmp/
-  #pm install /data/local/tmp/app-release.apk >> $LOGFILE 2>&1
-  #cd $preinstall_path
   cd $tmp
   rm -rf boot
 

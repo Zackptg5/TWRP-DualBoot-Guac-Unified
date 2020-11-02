@@ -244,8 +244,6 @@ patch_fstabs() {
     sed -i "/data2/d" $i
 		sed -ri "/name\/userdata |name\/metadata / s/wait,slotselect/wait/" $i
     local fst = "$(ls -laZ $i | awk '{print $1}')"
-    echo -e "$(date +"%Y-%m-%d %H:%M:%S.%3N") - old context: $perm" >> $LOGFILE 2>&1
-    echo -e "$(date +"%Y-%m-%d %H:%M:%S.%3N") - new context: $fst" >> $LOGFILE 2>&1
     #ui_print "    - Change fstab context $perm"
 		chcon $perm $i
     #echo -e "$(date +"%Y-%m-%d %H:%M:%S.%3N") - Context changed" >> $LOGFILE 2>&1
