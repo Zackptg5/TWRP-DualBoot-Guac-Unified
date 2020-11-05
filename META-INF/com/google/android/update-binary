@@ -1,6 +1,6 @@
 #!/sbin/sh
 # TWRP A/B Installer Backend
-# by Invernomut0, Zackptg5, Osm0sis, Dees_Troy, Topjohnwu, and CosmicDan
+# by Zackptg5, Osm0sis, Dees_Troy, Topjohnwu, and CosmicDan
 
 # Functions needed early
 ui_print() { $BOOTMODE && echo "$1" || echo -e "ui_print $1\nui_print" >> $OUTFD; }
@@ -10,8 +10,6 @@ abort() { ui_print "$1"; ui_print " "; exit 1; }
 OUTFD=/proc/self/fd/$2
 ZIPFILE="$3"
 tmp=/dev/tmp/twrp-install
-LOGFILENAME=dualboot_$(date +"%Y_%m_%d_%I_%M_%p").log
-LOGFILE=$tmp/$LOGFILENAME
 target=/dev/block/bootdevice/by-name/boot
 magiskdata=false
 mountdata=true
@@ -33,31 +31,18 @@ ps | grep zygote | grep -v grep >/dev/null && BOOTMODE=true || BOOTMODE=false
 $BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -v grep >/dev/null && BOOTMODE=true
 $BOOTMODE && abort "! Flash in TWRP - use img by mauronofrio if first install!"
 
-ui_print "       #                            /" 
-ui_print "        #                          /"                             
-ui_print "         #   ,########////////.   /"                            
-ui_print "        (#############/////////////)"                       
-ui_print "     #################/////////////////"                       
-ui_print "   #####(    )########////////(    )/////"                      
-ui_print "  ####################////////////////////"                     
-ui_print " #####################/////////////////////"                  
-ui_print "######################//////////////////////"
 ui_print "###########################################"
-ui_print "#       OrangeFox + Magisk Installer      #"
+ui_print "#         TWRP + Magisk Installer         #"
 ui_print "#          with a/b userdata for          #"
 ui_print "#        OnePlus 7/7 Pro/7 Pro 5G         #"
 ui_print "#               by Zackptg5               #"
 ui_print "###########################################"
-ui_print "#            OrangeFox Version            #"
+ui_print "#        TWRP build by Mauronofrio        #"
 ui_print "###########################################"
 ui_print "# Note that this will also disable verity #"
 ui_print "###########################################"
-ui_print "#            ANDROID 11 REBORN            #"
-ui_print "#  Ae3NerdGod, Invernomuto, Wishmasterflo #"
-ui_print "###########################################"
 ui_print " "
-echo "" >> $LOGFILE 2>&1
-echo -e "$(date +"%Y-%m-%d %H:%M:%S.%3N") - Log start." >> $LOGFILE 2>&1
+
 set -x
 rm -rf $tmp
 mkdir -p $tmp
@@ -384,7 +369,6 @@ for slot_select in active inactive; do
   cd boot
   dd bs=1048576 if=$target$slot of=boot.img
   magiskboot unpack -h boot.img
-  echo -e "$(date +"%Y-%m-%d %H:%M:%S.%3N") - Patching $slot_select slot: $slot..." >> $LOGFILE 2>&1
 
   # boot.img header cmdline remove skip_override (flar2 patch)
   sed -i "s|$(grep '^cmdline=' header | cut -d= -f2-)|$(grep '^cmdline=' header | cut -d= -f2- | sed -e 's/skip_override//' -e 's/  */ /g' -e 's/[ \t]*$//')|" header
@@ -422,23 +406,12 @@ for slot_select in active inactive; do
       [ "$layout" == "stock" ] && mount -t $type "/dev/block/bootdevice/by-name/userdata" /data || { mount -t $type "/dev/block/bootdevice/by-name/userdata$slot" /data || mountdata=false; }
     fi
 
-    
     if ! $KEEPVERITY; then
-      if [ -f "/system/etc/init/hw/init.rc" ]; then
-        ui_print "- Android 11 - using new path for init.rc"
-        rm -rf /system_root/datacommon /system_root/init.mount_datacommon.sh /system_root/init.locksettings_dualboot.sh
-        [ "$(grep '# Zackptg5-DualBoot' /system/etc/init/hw/init.rc)" ] && sed -i -e "/# Zackptg5-DualBootMod/,/init.mount_datacommon.sh/d" -e "$d" /system/etc/init/hw/init.rc
-        while true; do 
-          [ "$(tail -n1 /system/etc/init/hw/init.rc)" ] && break || sed -i '$d' /system/etc/init/hw/init.rc
-        done
-      else
-        ui_print "- Android 10 - using standard path for init.rc"
-        rm -rf /system_root/datacommon /system_root/init.mount_datacommon.sh /system_root/init.locksettings_dualboot.sh
-        [ "$(grep '# Zackptg5-DualBoot' /system_root/init.rc)" ] && sed -i -e "/# Zackptg5-DualBootMod/,/init.mount_datacommon.sh/d" -e "$d" /system_root/init.rc
-        while true; do 
-          [ "$(tail -n1 /system_root/init.rc)" ] && break || sed -i '$d' /system_root/init.rc
-        done
-      fi
+      rm -rf /system_root/datacommon /system_root/init.mount_datacommon.sh /system_root/init.locksettings_dualboot.sh
+      [ "$(grep '# Zackptg5-DualBoot' /system_root/init.rc)" ] && sed -i -e "/# Zackptg5-DualBootMod/,/init.mount_datacommon.sh/d" -e "$d" /system_root/init.rc
+      while true; do 
+        [ "$(tail -n1 /system_root/init.rc)" ] && break || sed -i '$d' /system_root/init.rc
+      done
 
       # Get location of sepolicy
       $magisk && context=magisk || context=shell
@@ -491,37 +464,19 @@ for slot_select in active inactive; do
           set_perm /system_root/datacommon media_rw media_rw 0771 u:object_r:media_rw_data_file:s0
           cp -f $tmp/init.mount_datacommon.sh /system_root/init.mount_datacommon.sh
           set_perm /system_root/init.mount_datacommon.sh 0 2000 0755 u:object_r:shell_exec:s0
-          if [ -f "/system/etc/init/hw/init.rc" ]; then
-            ui_print "- Android 11 - Commondata Script Injection"
-            [ "$(grep '# Zackptg5-DualBootMod' /system/etc/init/hw/init.rc)" ] || echo -ne "\n# Zackptg5-DualBootMod" >> /system/etc/init/hw/init.rc
-            echo -e "\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh\n" >> /system/etc/init/hw/init.rc
-          else
-            ui_print "- Android 10 - Commondata Script Injection"
-            [ "$(grep '# Zackptg5-DualBootMod' /system_root/init.rc)" ] || echo -ne "\n# Zackptg5-DualBootMod" >> /system_root/init.rc
-            echo -e "\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh\n" >> /system_root/init.rc
-          fi
+          [ "$(grep '# Zackptg5-DualBootMod' /system_root/init.rc)" ] || echo -ne "\n# Zackptg5-DualBootMod" >> /system_root/init.rc
+          echo -e "\non property:sys.boot_completed=1\n    exec_background u:r:$context:s0 -- /init.mount_datacommon.sh\n" >> /system_root/init.rc
         fi
       fi
 
       # Patch vendor fstabs
-      ui_print "  Patching vendor fstabs"
       FSTABS="$(find /system_root /vendor/etc /odm/etc -maxdepth 1 -type f -name "fstab.qcom" | sed 's|^./|/|')"
       [ "$FSTABS" ] && patch_fstabs
     fi
 
     # Un/Install Magisk, patch verity otherwise since we're likely modifying system
     if $magisk; then
-      ui_print "- Checking Environment..."
-      if [ -f "/system/etc/init/hw/init.rc" ]; then
-        ui_print "  * WARNING - A11 FASTBOOT BUG"
-        ui_print "  * PLEASE FLASH MAGISK MANUALLY"
-        ui_print "  * Patching only ramdisk"
-        ui_print "  * Slot: $slot is unrooted."
-        magiskboot cpio ramdisk.cpio patch
-      else
-        ui_print "  Android 10 - installing Magisk 20.4"
-        . magisk.sh
-      fi
+      . magisk.sh
     else
       ui_print "  Patching ramdisk"
       magiskboot cpio ramdisk.cpio patch
@@ -564,19 +519,11 @@ umount -l /dev/random 2>/dev/null
 [ -z $OLD_LD_CFG ] || export LD_CONFIG_FILE=$OLD_LD_CFG
 
 cd /
-mount /data
-cd $tmp
-echo -e "$(date +"%Y-%m-%d %H:%M:%S.%3N") - Dual boot script end." >> $LOGFILE 2>&1
-//Create module directory
-mkdir -pv /data/adb/DualBoot
-ui_print "- Copy logfile to /data/adb/DualBoot/" 
-cp -af $LOGFILE /data/adb/modules/DualBoot/$LOGFILENAME
 rm -rf /dev/tmp
 
 ui_print " "
-ui_print "- Done installing Recovery"
+ui_print "- Done installing TWRP"
 ui_print " "
-
 if [ "$layout" == "stock" ]; then
   $magisk || ui_print "*** NOTE: You are now unrooted! ***"
 else
@@ -584,4 +531,6 @@ else
   $magiskb || ui_print "*** NOTE: Slot B is now unrooted! ***"
 fi
 ui_print " "
+
+mount /data
 exit 0

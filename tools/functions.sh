@@ -226,7 +226,6 @@ reset_slot() {
 
 patch_fstabs() {
 	ui_print "  Patching fstabs:"
-  echo -e "$(date +"%Y-%m-%d %H:%M:%S.%3N") - Patching fstabs" >> $LOGFILE 2>&1
 	for i in $FSTABS; do
 		[ -f $i ] || continue
 		ui_print "    $i"
@@ -239,22 +238,15 @@ patch_fstabs() {
       s/,support_scfs|support_scfs,|support_scfs\b//g
       s/,fsverity|fsverity,|fsverity\b//g
     " "$i"
-    ui_print "    - KeepEnforceEncrypt: $KEEPFORCEENCRYPT"
     $KEEPFORCEENCRYPT || sed -i "s/fileencryption=/=/g" $i
     sed -i "/data2/d" $i
 		sed -ri "/name\/userdata |name\/metadata / s/wait,slotselect/wait/" $i
-    local fst = "$(ls -laZ $i | awk '{print $1}')"
-    #ui_print "    - Change fstab context $perm"
-		chcon $perm $i
-    #echo -e "$(date +"%Y-%m-%d %H:%M:%S.%3N") - Context changed" >> $LOGFILE 2>&1
     while true; do
-      echo -e "$(date +"%Y-%m-%d %H:%M:%S.%3N") - * $(tail -n1 $i) *" >> $LOGFILE 2>&1
       [ "$(tail -n1 $i)" ] && { echo >> $i; break; } || sed -i '$d' $i
     done
-    ui_print "    - Checking Layout: $layout"
     [ "$layout" == "stock" ] || sed -ri "/name\/userdata |name\/metadata / s/wait,/wait,slotselect,/" $i
+		chcon $perm $i
 	done
-  ui_print "    $i - Done"
 }
 
 #########################################
